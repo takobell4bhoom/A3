@@ -1,0 +1,13 @@
+{
+  "devDependencies": {
+    "autoprefixer": "^10.5.4",
+    "postcss": "^8.5.25",
+    "tailwindcss": "^4.3.3"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.0",
+    "@uppy/core": "^5.2.0",
+    "@uppy/react": "^5.2.0",
+    "@uppy/tus": "^5.1.1"
+  }
+}

@@ -1,5 +1,3 @@
-import * as React from "react"
-
 export const Card = ({ className = "", ...props }) => (
   <div className={`rounded-2xl border border-brand bg-white shadow-xl shadow-slate-200/50 ${className}`} {...props} />
 )

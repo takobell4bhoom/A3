@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useToast } from '@/components/ui/toast';
+import { validateFile, generateSecureFilePath } from '@/lib/storage';
 import { UploadCloud, CheckCircle2, AlertCircle, FileText, Loader2 } from 'lucide-react';
 
 export default function FileUpload({ userId, onUploadComplete }) {
@@ -9,27 +11,45 @@ export default function FileUpload({ userId, onUploadComplete }) {
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState(null); // 'success' | 'error' | null
   const [errorMessage, setErrorMessage] = useState('');
+  const toast = useToast();
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      const validation = validateFile(selectedFile);
+      
+      if (!validation.valid) {
+        setStatus('error');
+        setErrorMessage(validation.error);
+        toast.error('Invalid File', validation.error);
+        setFile(null);
+        return;
+      }
+
+      setFile(selectedFile);
       setStatus(null);
       setErrorMessage('');
     }
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file || !userId) return;
+
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      setStatus('error');
+      setErrorMessage(validation.error);
+      toast.error('Invalid File', validation.error);
+      return;
+    }
 
     setUploading(true);
     setStatus(null);
     setErrorMessage('');
 
     try {
-      // 1. Generate unique file path
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${userId}/${fileName}`;
+      // 1. Generate collision-free secure storage path
+      const { filePath } = generateSecureFilePath(userId, file.name, 'customer');
 
       // 2. Upload file to Private Supabase Storage Bucket ('customer-documents')
       const { error: uploadError } = await supabase.storage
@@ -42,27 +62,33 @@ export default function FileUpload({ userId, onUploadComplete }) {
 
       if (uploadError) throw uploadError;
 
-      // 3. Save relative storage path in DB (for Private Bucket Signed URLs)
+      // 3. Save relative storage path in DB
       const { error: dbError } = await supabase
         .from('documents')
         .insert([
           {
             user_id: userId,
             file_name: file.name,
-            file_url: filePath, // Store relative storage path
-            upload_status: 'completed'
+            file_url: filePath,
+            file_size_bytes: file.size,
+            mime_type: file.type || 'application/octet-stream',
+            upload_status: 'completed',
+            uploaded_by_role: 'customer'
           }
         ]);
 
       if (dbError) throw dbError;
 
       setStatus('success');
+      toast.success('Document Uploaded', `${file.name} was successfully encrypted and submitted.`);
       setFile(null);
       if (onUploadComplete) onUploadComplete();
     } catch (err) {
       console.error('Upload error:', err);
       setStatus('error');
-      setErrorMessage(err.message || 'File upload failed. Please check your connection and try again.');
+      const msg = err.message || 'File upload failed. Please check your connection and try again.';
+      setErrorMessage(msg);
+      toast.error('Upload Failed', msg);
     } finally {
       setUploading(false);
     }
@@ -76,7 +102,7 @@ export default function FileUpload({ userId, onUploadComplete }) {
           Document Submission
         </CardTitle>
         <CardDescription>
-          Upload your financial records, W-2s, or tax schedules. Supports all file formats.
+          Upload your financial records, W-2s, or tax schedules. Supports all document formats up to 500MB.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

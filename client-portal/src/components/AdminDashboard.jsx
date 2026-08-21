@@ -1,794 +1,632 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { createClient } from '@supabase/supabase-js';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  Building2, LogOut, Download, RefreshCw, Users, FileText, CreditCard, 
-  Clock, UserPlus, Send, UploadCloud, Loader2, CheckCircle2, UserX, 
-  UserCheck, ShieldAlert, Trash2, Plus, Receipt, LayoutDashboard, FolderOpen
-} from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/components/ui/toast';
+import { getSecureDocumentUrl, generateSecureFilePath } from '@/lib/storage';
+
+import AdminHeader from './admin/AdminHeader';
+import OverviewDashboard from './admin/OverviewDashboard';
+import ClientDirectory from './admin/ClientDirectory';
+import ClientWorkspace from './admin/ClientWorkspace/ClientWorkspace';
+import DocumentCenter from './admin/DocumentCenter';
+import InvoiceBuilder from './admin/InvoiceBuilder/InvoiceBuilder';
+import InvoiceList from './admin/InvoiceBuilder/InvoiceList';
+
+import { Users, FolderOpen, Receipt, LayoutDashboard, Plus } from 'lucide-react';
 
 export default function AdminDashboard({ session }) {
-  const [activeTab, setActiveTab] = useState('clients'); // 'clients' | 'documents' | 'status' | 'invoices'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'clients' | 'invoices' | 'documents'
+  const [invoiceSubTab, setInvoiceSubTab] = useState('list'); // 'list' | 'create'
+
   const [customers, setCustomers] = useState([]);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [documents, setDocuments] = useState([]);
-  const [statusStep, setStatusStep] = useState('');
-  const [statusNotes, setStatusNotes] = useState('');
-  
-  // Onboard Client State
-  const [newClientEmail, setNewClientEmail] = useState('');
-  const [newClientPassword, setNewClientPassword] = useState('');
-  const [creatingClient, setCreatingClient] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null); // null means viewing ClientDirectory CRM table
+  const [allDocuments, setAllDocuments] = useState([]);
+  const [allInvoices, setAllInvoices] = useState([]);
+  const [statusTrackerMap, setStatusTrackerMap] = useState({});
 
-  // Admin File Send State
-  const [adminFile, setAdminFile] = useState(null);
-  const [uploadingAdminFile, setUploadingAdminFile] = useState(false);
-  const [adminUploadSuccess, setAdminUploadSuccess] = useState(false);
-
-  // Invoice Module State
-  const [billingEntity, setBillingEntity] = useState('Non GST Billing');
-  const [invoiceNo, setInvoiceNo] = useState(`INV-${Math.floor(1000 + Math.random() * 9000)}`);
-  const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
-  const [paymentTerm, setPaymentTerm] = useState('NET 30');
-  const [dueDate, setDueDate] = useState('');
-  const [remarks, setRemarks] = useState('');
-  const [stripeUrl, setStripeUrl] = useState('');
-  const [roundOff, setRoundOff] = useState(0);
-
-  // Invoice Line Items
-  const [items, setItems] = useState([
-    { id: 1, particulars: 'Tax Return Preparation & Filing', type: 'Task', amount: 350, discount: 0 }
-  ]);
-
+  // Loading and action states
   const [loading, setLoading] = useState(true);
+  const [creatingClient, setCreatingClient] = useState(false);
+  const [deletingClient, setDeletingClient] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
   const [savingInvoice, setSavingInvoice] = useState(false);
-  const [togglingClient, setTogglingClient] = useState(false);
+  const [togglingAccess, setTogglingAccess] = useState(false);
 
-  useEffect(() => {
-    fetchCustomers();
+  const { organization, signOut } = useAuth();
+  const toast = useToast();
+
+  // Load All Clients, All Documents, All Invoices, All Status Trackers
+  const refreshGlobalData = useCallback(async () => {
+    try {
+      // 1. Fetch Clients
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', 'customer')
+        .order('created_at', { ascending: false });
+
+      if (usersError) throw usersError;
+      if (usersData) {
+        setCustomers(usersData);
+        // If an active customer is selected, sync their updated data
+        setSelectedCustomer(prev => (prev ? usersData.find(c => c.id === prev.id) || null : null));
+      }
+
+      // 2. Fetch All Documents
+      const { data: docsData, error: docsError } = await supabase
+        .from('documents')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (docsError) throw docsError;
+      if (docsData) {
+        setAllDocuments(docsData);
+      }
+
+      // 3. Fetch All Invoices
+      const { data: invoicesData, error: invoicesError } = await supabase
+        .from('invoices')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (invoicesError) throw invoicesError;
+      if (invoicesData) {
+        setAllInvoices(invoicesData);
+      }
+
+      // 4. Fetch All Status Trackers
+      const { data: statuses, error: statusError } = await supabase
+        .from('status_tracker')
+        .select('*');
+
+      if (statusError) throw statusError;
+      if (statuses) {
+        const map = {};
+        for (const s of statuses) {
+          map[s.user_id] = s;
+        }
+        setStatusTrackerMap(map);
+      }
+    } catch (err) {
+      console.error('Error loading firm data:', err);
+    }
   }, []);
 
   useEffect(() => {
-    if (selectedCustomer) {
-      fetchCustomerDetails(selectedCustomer.id);
-    }
-  }, [selectedCustomer]);
+    let isMounted = true;
 
-  // Auto-calculate Due Date based on Payment Term & Issue Date
-  useEffect(() => {
-    if (!issueDate) return;
-    const dateObj = new Date(issueDate);
-    let daysToAdd = 30;
-    if (paymentTerm === 'NET 15') daysToAdd = 15;
-    if (paymentTerm === 'NET 60') daysToAdd = 60;
-    if (paymentTerm === 'Due on Receipt') daysToAdd = 0;
+    async function loadInitial() {
+      try {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('role', 'customer')
+          .order('created_at', { ascending: false });
 
-    dateObj.setDate(dateObj.getDate() + daysToAdd);
-    setDueDate(dateObj.toISOString().split('T')[0]);
-  }, [issueDate, paymentTerm]);
+        if (isMounted && usersData) {
+          setCustomers(usersData);
+        }
 
-  const fetchCustomers = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('role', 'customer')
-      .order('created_at', { ascending: false });
+        const { data: docsData } = await supabase
+          .from('documents')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      setCustomers(data);
-      if (data.length > 0 && !selectedCustomer) {
-        setSelectedCustomer(data[0]);
+        if (isMounted && docsData) {
+          setAllDocuments(docsData);
+        }
+
+        const { data: invoicesData } = await supabase
+          .from('invoices')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (isMounted && invoicesData) {
+          setAllInvoices(invoicesData);
+        }
+
+        const { data: statuses } = await supabase
+          .from('status_tracker')
+          .select('*');
+
+        if (isMounted && statuses) {
+          const map = {};
+          for (const s of statuses) {
+            map[s.user_id] = s;
+          }
+          setStatusTrackerMap(map);
+        }
+      } catch (err) {
+        console.error('Error in initial load:', err);
+      } finally {
+        if (isMounted) setLoading(false);
       }
     }
-    setLoading(false);
-  };
 
-  const fetchCustomerDetails = async (customerId) => {
-    const { data: docs } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('user_id', customerId)
-      .order('created_at', { ascending: false });
+    loadInitial();
 
-    setDocuments(docs || []);
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-    const { data: status } = await supabase
-      .from('status_tracker')
-      .select('*')
-      .eq('user_id', customerId)
-      .maybeSingle();
-
-    if (status) {
-      setStatusStep(status.current_step);
-      setStatusNotes(status.notes || '');
-    } else {
-      setStatusStep('');
-      setStatusNotes('');
-    }
-  };
-
-  // Invoice Calculations
-  const handleAddItem = () => {
-    setItems([...items, { id: Date.now(), particulars: '', type: 'Task', amount: 0, discount: 0 }]);
-  };
-
-  const handleRemoveItem = (id) => {
-    if (items.length === 1) return;
-    setItems(items.filter(item => item.id !== id));
-  };
-
-  const handleItemChange = (id, field, value) => {
-    setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
-  };
-
-  const calculateSubtotal = () => items.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
-  const calculateDiscountTotal = () => items.reduce((acc, curr) => acc + (parseFloat(curr.discount) || 0), 0);
-  const calculateTotalAmount = () => calculateSubtotal() - calculateDiscountTotal() + (parseFloat(roundOff) || 0);
-
-  const handleCreateInvoice = async (e) => {
-    e.preventDefault();
-    if (!selectedCustomer) return;
-    setSavingInvoice(true);
-
-    try {
-      const { error } = await supabase
-        .from('invoices')
-        .insert([{
-          user_id: selectedCustomer.id,
-          invoice_no: invoiceNo,
-          billing_entity: billingEntity,
-          payment_term: paymentTerm,
-          issue_date: issueDate,
-          due_date: dueDate,
-          remarks: remarks,
-          subtotal: calculateSubtotal(),
-          discount_total: calculateDiscountTotal(),
-          round_off: parseFloat(roundOff) || 0,
-          amount: calculateTotalAmount(),
-          stripe_url: stripeUrl,
-          items: items,
-          status: 'unpaid'
-        }]);
-
-      if (error) throw error;
-
-      alert(`Invoice ${invoiceNo} issued successfully to ${selectedCustomer.email}!`);
-      setInvoiceNo(`INV-${Math.floor(1000 + Math.random() * 9000)}`);
-      setRemarks('');
-      setStripeUrl('');
-      setItems([{ id: Date.now(), particulars: 'Tax Advisory Services', type: 'Task', amount: 0, discount: 0 }]);
-    } catch (err) {
-      alert('Error creating invoice: ' + err.message);
-    } finally {
-      setSavingInvoice(false);
-    }
-  };
-
-  const handleToggleClientAccess = async () => {
-    if (!selectedCustomer) return;
-    const newStatus = !selectedCustomer.is_disabled;
-    if (!window.confirm(newStatus ? `Disable access for ${selectedCustomer.email}?` : `Re-enable access for ${selectedCustomer.email}?`)) return;
-
-    setTogglingClient(true);
-    try {
-      const { error } = await supabase.from('users').update({ is_disabled: newStatus }).eq('id', selectedCustomer.id);
-      if (error) throw error;
-      setSelectedCustomer({ ...selectedCustomer, is_disabled: newStatus });
-      await fetchCustomers();
-    } catch (err) {
-      alert('Error updating client status: ' + err.message);
-    } finally {
-      setTogglingClient(false);
-    }
-  };
-
-  const handleDownloadFile = async (filePath) => {
-    try {
-      let cleanPath = filePath.includes('customer-documents/') ? filePath.split('customer-documents/').pop() : filePath;
-      const { data, error } = await supabase.storage.from('customer-documents').createSignedUrl(cleanPath, 60);
-      if (error) throw error;
-      window.open(data.signedUrl, '_blank');
-    } catch (err) {
-      alert('Error downloading file: ' + err.message);
-    }
-  };
-
-  const handleDeleteFile = async (docId, filePath) => {
-    if (!window.confirm('Delete this document permanently?')) return;
-    try {
-      let cleanPath = filePath.includes('customer-documents/') ? filePath.split('customer-documents/').pop() : filePath;
-      await supabase.storage.from('customer-documents').remove([cleanPath]);
-      const { error } = await supabase.from('documents').delete().eq('id', docId);
-      if (error) throw error;
-      fetchCustomerDetails(selectedCustomer.id);
-    } catch (err) {
-      alert('Error deleting document: ' + err.message);
-    }
-  };
-
-  const handleAdminFileUpload = async (e) => {
-    e.preventDefault();
-    if (!adminFile || !selectedCustomer) return;
-    setUploadingAdminFile(true);
-    setAdminUploadSuccess(false);
-
-    try {
-      const fileExt = adminFile.name.split('.').pop();
-      const fileName = `admin_${Math.random()}.${fileExt}`;
-      const filePath = `${selectedCustomer.id}/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage.from('customer-documents').upload(filePath, adminFile, {
-        cacheControl: '3600',
-        upsert: false,
-        contentType: adminFile.type || 'application/pdf',
-      });
-      if (uploadError) throw uploadError;
-
-      const { error: dbError } = await supabase.from('documents').insert([{
-        user_id: selectedCustomer.id,
-        file_name: adminFile.name,
-        file_url: filePath,
-        upload_status: 'completed',
-        uploaded_by_role: 'admin'
-      }]);
-      if (dbError) throw dbError;
-
-      setAdminUploadSuccess(true);
-      setAdminFile(null);
-      fetchCustomerDetails(selectedCustomer.id);
-    } catch (err) {
-      alert('Error sending file: ' + err.message);
-    } finally {
-      setUploadingAdminFile(false);
-    }
-  };
-
-  const handleCreateCustomer = async (e) => {
-    e.preventDefault();
+  // Client Onboarding Handler
+  const handleCreateCustomer = async ({ email, password, fullName }) => {
     setCreatingClient(true);
     try {
-      const tempSupabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false } });
-      const { error } = await tempSupabase.auth.signUp({ email: newClientEmail, password: newClientPassword });
+      const tempSupabase = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY,
+        { auth: { persistSession: false } }
+      );
+
+      const { data, error } = await tempSupabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            role: 'customer',
+          },
+        },
+      });
+
       if (error) throw error;
-      alert(`Client created for ${newClientEmail}`);
-      setNewClientEmail('');
-      setNewClientPassword('');
-      await fetchCustomers();
+
+      toast.success('Client Onboarded', `Account created for ${email}. Client may now log in.`);
+      await refreshGlobalData();
+      if (data?.user) {
+        const newClient = { id: data.user.id, email, full_name: fullName, is_disabled: false };
+        setSelectedCustomer(newClient);
+        setActiveTab('clients');
+      }
+      return true;
     } catch (err) {
-      alert('Error creating client: ' + err.message);
+      toast.error('Onboarding Failed', err.message || 'Could not create client account.');
+      return false;
     } finally {
       setCreatingClient(false);
     }
   };
 
-  const handleUpdateStatus = async (e) => {
-    e.preventDefault();
+  // Toggle Client Access (Enable / Disable)
+  const handleToggleClientAccess = async () => {
     if (!selectedCustomer) return;
-    setSavingStatus(true);
-    const { error } = await supabase.from('status_tracker').upsert({
-      user_id: selectedCustomer.id,
-      current_step: statusStep,
-      notes: statusNotes,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'user_id' });
+    const newStatus = !selectedCustomer.is_disabled;
+    setTogglingAccess(true);
 
-    if (error) alert('Error: ' + error.message);
-    else alert('Status updated in real-time!');
-    setSavingStatus(false);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ is_disabled: newStatus })
+        .eq('id', selectedCustomer.id);
+
+      if (error) throw error;
+
+      const updatedCustomer = { ...selectedCustomer, is_disabled: newStatus };
+      setSelectedCustomer(updatedCustomer);
+      setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? updatedCustomer : c));
+
+      toast.success(
+        newStatus ? 'Access Suspended' : 'Access Restored',
+        `Portal access for ${selectedCustomer.email} is now ${newStatus ? 'disabled' : 'active'}.`
+      );
+    } catch (err) {
+      toast.error('Update Failed', err.message || 'Could not change client access status.');
+    } finally {
+      setTogglingAccess(false);
+    }
   };
 
-  const handleSignOut = () => supabase.auth.signOut();
+  // Delete Customer Handler
+  const handleDeleteCustomer = async (customerId) => {
+    if (!customerId) return;
+    setDeletingClient(true);
 
-  const clientDocs = documents.filter(d => d.uploaded_by_role !== 'admin');
-  const adminDocs = documents.filter(d => d.uploaded_by_role === 'admin');
+    try {
+      // 1. Delete records from database (cascades to documents, status_tracker, invoices)
+      const { error: dbError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', customerId);
+
+      if (dbError) throw dbError;
+
+      // 2. Storage files cleanup
+      try {
+        const { data: files } = await supabase.storage
+          .from('customer-documents')
+          .list(customerId);
+
+        if (files && files.length > 0) {
+          const filePaths = files.map(f => `${customerId}/${f.name}`);
+          await supabase.storage.from('customer-documents').remove(filePaths);
+        }
+      } catch (storageErr) {
+        console.warn('Storage cleanup non-fatal warning:', storageErr);
+      }
+
+      // 3. Optimistic state updates
+      setCustomers(prev => prev.filter(c => c.id !== customerId));
+      setAllDocuments(prev => prev.filter(d => d.user_id !== customerId));
+      setAllInvoices(prev => prev.filter(i => i.user_id !== customerId));
+
+      if (selectedCustomer?.id === customerId) {
+        setSelectedCustomer(null);
+      }
+
+      toast.success('Client Deleted', 'Client account and associated records permanently removed.');
+    } catch (err) {
+      toast.error('Deletion Failed', err.message || 'Could not delete client.');
+    } finally {
+      setDeletingClient(false);
+    }
+  };
+
+  // Document Delivery Handler
+  const handleAdminFileUpload = async (targetCustomerId, adminFile) => {
+    if (!adminFile || !targetCustomerId) return false;
+
+    try {
+      const { filePath } = generateSecureFilePath(targetCustomerId, adminFile.name, 'admin');
+
+      const { error: uploadError } = await supabase.storage
+        .from('customer-documents')
+        .upload(filePath, adminFile, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: adminFile.type || 'application/pdf',
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: newDoc, error: dbError } = await supabase
+        .from('documents')
+        .insert([{
+          user_id: targetCustomerId,
+          file_name: adminFile.name,
+          file_url: filePath,
+          file_size_bytes: adminFile.size,
+          mime_type: adminFile.type || 'application/octet-stream',
+          upload_status: 'completed',
+          uploaded_by_role: 'admin',
+        }])
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+
+      const targetClient = customers.find(c => c.id === targetCustomerId);
+      toast.success('Document Delivered', `Delivered ${adminFile.name} to ${targetClient?.email || 'client'}.`);
+      
+      if (newDoc) {
+        setAllDocuments(prev => [newDoc, ...prev]);
+      } else {
+        await refreshGlobalData();
+      }
+      return true;
+    } catch (err) {
+      toast.error('Delivery Failed', err.message || 'Could not upload document.');
+      return false;
+    }
+  };
+
+  // Download & Delete File Handlers
+  const handleDownloadFile = async (filePath) => {
+    try {
+      const signedUrl = await getSecureDocumentUrl(filePath, 180);
+      window.open(signedUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      toast.error('Download Failed', err.message);
+    }
+  };
+
+  const handleDeleteFile = async (docId, filePath) => {
+    try {
+      const cleanPath = filePath.includes('customer-documents/') 
+        ? filePath.split('customer-documents/').pop() 
+        : filePath;
+
+      await supabase.storage.from('customer-documents').remove([cleanPath]);
+      const { error } = await supabase.from('documents').delete().eq('id', docId);
+      if (error) throw error;
+
+      toast.success('Document Deleted', 'File removed from secure storage.');
+      setAllDocuments(prev => prev.filter(d => d.id !== docId));
+    } catch (err) {
+      toast.error('Delete Failed', err.message);
+    }
+  };
+
+  // Update Status Milestone
+  const handleUpdateStatus = async (targetCustomerId, step, notes) => {
+    if (!targetCustomerId) return;
+    setSavingStatus(true);
+
+    try {
+      const { error } = await supabase.from('status_tracker').upsert({
+        user_id: targetCustomerId,
+        current_step: step,
+        notes: notes,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+
+      const targetClient = customers.find(c => c.id === targetCustomerId);
+      toast.success('Status Published', `Filing milestone published for ${targetClient?.email || 'client'}.`);
+      
+      setStatusTrackerMap(prev => ({
+        ...prev,
+        [targetCustomerId]: { user_id: targetCustomerId, current_step: step, notes, updated_at: new Date().toISOString() }
+      }));
+    } catch (err) {
+      toast.error('Status Error', err.message);
+    } finally {
+      setSavingStatus(false);
+    }
+  };
+
+  // Create Invoice Handler
+  const handleCreateInvoice = async (invoicePayload) => {
+    setSavingInvoice(true);
+    try {
+      const { error } = await supabase.from('invoices').insert([invoicePayload]);
+      if (error) throw error;
+
+      toast.success(
+        'Invoice Created & Dispatched',
+        `Invoice ${invoicePayload.invoice_no} issued successfully.`
+      );
+      await refreshGlobalData();
+      return true;
+    } catch (err) {
+      toast.error('Invoice Creation Failed', err.message);
+      return false;
+    } finally {
+      setSavingInvoice(false);
+    }
+  };
+
+  // Toggle Invoice Status (Paid / Unpaid)
+  const handleToggleInvoiceStatus = async (invoiceId, newStatus) => {
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ status: newStatus })
+        .eq('id', invoiceId);
+
+      if (error) throw error;
+
+      setAllInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, status: newStatus } : inv));
+      toast.success('Status Updated', `Invoice status updated to ${newStatus.toUpperCase()}.`);
+    } catch (err) {
+      toast.error('Update Failed', err.message);
+    }
+  };
+
+  // Delete Invoice Handler
+  const handleDeleteInvoice = async (invoiceId) => {
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .delete()
+        .eq('id', invoiceId);
+
+      if (error) throw error;
+
+      setAllInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
+      toast.success('Invoice Deleted', 'Invoice permanently removed.');
+    } catch (err) {
+      toast.error('Delete Failed', err.message);
+    }
+  };
+
+  // Filter client-specific documents & invoices when in Client Workspace
+  const selectedClientDocuments = selectedCustomer 
+    ? allDocuments.filter(d => d.user_id === selectedCustomer.id) 
+    : [];
+
+  const selectedClientInvoices = selectedCustomer 
+    ? allInvoices.filter(i => i.user_id === selectedCustomer.id) 
+    : [];
+
+  const selectedClientStatusTracker = selectedCustomer 
+    ? statusTrackerMap[selectedCustomer.id] || null 
+    : null;
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 pb-20 md:pb-8 flex flex-col">
-      
-      {/* Top Header */}
-      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-slate-800 text-emerald-400 border border-slate-700">
-              <Building2 className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="font-bold text-base leading-none">Apex Tax & Advisory</h1>
-              <span className="text-[11px] font-semibold text-emerald-400 tracking-wider uppercase">Enterprise Admin</span>
-            </div>
-          </div>
+    <div className="min-h-screen bg-slate-100 text-slate-900 pb-20 md:pb-8 flex flex-col font-sans">
+      {/* Top Enterprise Header */}
+      <AdminHeader
+        firmName={organization?.name || 'Tax Shield Advisor'}
+        userEmail={session?.user?.email}
+        activeTab={activeTab}
+        setActiveTab={(tab) => {
+          setActiveTab(tab);
+          if (tab !== 'clients') {
+            setSelectedCustomer(null);
+          }
+        }}
+        documentCount={allDocuments.length}
+        onSignOut={signOut}
+      />
 
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400 hidden sm:inline">{session?.user?.email}</span>
-            <Button variant="outline" size="sm" onClick={handleSignOut} className="gap-1.5 text-xs bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700">
-              <LogOut className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Sign Out</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Desktop Navigation Tabs Bar */}
-        <div className="hidden md:block bg-slate-950 border-t border-slate-800/80">
-          <div className="max-w-7xl mx-auto px-6 flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('clients')}
-              className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
-                activeTab === 'clients' ? 'border-emerald-400 text-emerald-400 bg-white/5' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Users className="w-4 h-4" /> Clients & Onboarding
-            </button>
-            <button
-              onClick={() => setActiveTab('documents')}
-              className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
-                activeTab === 'documents' ? 'border-emerald-400 text-emerald-400 bg-white/5' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <FolderOpen className="w-4 h-4" /> Document Center ({documents.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('status')}
-              className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
-                activeTab === 'status' ? 'border-emerald-400 text-emerald-400 bg-white/5' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Clock className="w-4 h-4" /> Work Tracker
-            </button>
-            <button
-              onClick={() => setActiveTab('invoices')}
-              className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
-                activeTab === 'invoices' ? 'border-emerald-400 text-emerald-400 bg-white/5' : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Receipt className="w-4 h-4" /> Invoice Builder
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Workspace Area */}
+      {/* Main Workspace Canvas */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">
+        
+        {/* ================= TAB 1: EXECUTIVE OVERVIEW ================= */}
+        {activeTab === 'overview' && (
+          <OverviewDashboard
+            customers={customers}
+            documents={allDocuments}
+            invoices={allInvoices}
+            onSelectClient={(c) => {
+              setSelectedCustomer(c);
+              setActiveTab('clients');
+            }}
+            onOpenOnboardModal={() => {
+              setSelectedCustomer(null);
+              setActiveTab('clients');
+            }}
+            firmName={organization?.name || 'Tax Shield Advisor'}
+          />
+        )}
 
-        {/* Selected Workspace Header Bar */}
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-700 font-bold shrink-0">
-              {selectedCustomer ? selectedCustomer.email[0].toUpperCase() : '?'}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                  Active Client Workspace
-                </span>
-                {selectedCustomer?.is_disabled && (
-                  <span className="text-[10px] font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-100 flex items-center gap-1">
-                    <ShieldAlert className="w-3 h-3" /> Access Disabled
-                  </span>
-                )}
-              </div>
-              <h2 className="text-lg font-bold text-slate-900 mt-0.5 truncate">{selectedCustomer?.email || 'No Client Selected'}</h2>
-            </div>
-          </div>
-
-          {selectedCustomer && (
-            <div className="flex items-center gap-2 shrink-0">
-              <Button 
-                variant={selectedCustomer.is_disabled ? "accent" : "outline"} 
-                size="sm" 
-                onClick={handleToggleClientAccess} 
-                disabled={togglingClient} 
-                className={`text-xs h-8 ${!selectedCustomer.is_disabled ? "text-red-600 border-red-200 hover:bg-red-50" : ""}`}
-              >
-                {selectedCustomer.is_disabled ? <><UserCheck className="w-3.5 h-3.5 mr-1" /> Enable Access</> : <><UserX className="w-3.5 h-3.5 mr-1" /> Disable Access</>}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => fetchCustomerDetails(selectedCustomer.id)} className="text-xs h-8">
-                <RefreshCw className="w-3.5 h-3.5 mr-1" /> Refresh
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* ================= CATEGORY TAB 1: CLIENTS & ONBOARDING ================= */}
+        {/* ================= TAB 2: CLIENTS & 360° WORKSPACE ================= */}
         {activeTab === 'clients' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Onboard Form */}
-            <Card className="border-slate-200 lg:col-span-1 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2 text-slate-900">
-                  <UserPlus className="w-5 h-5 text-emerald-600" /> Onboard New Client
-                </CardTitle>
-                <CardDescription className="text-xs">Create client credentials to share with them.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleCreateCustomer} className="space-y-3">
-                  <div>
-                    <Label className="text-xs">Client Email</Label>
-                    <Input type="email" placeholder="client@company.com" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} required className="h-9 text-xs mt-1" />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Temporary Password</Label>
-                    <Input type="password" placeholder="••••••••" value={newClientPassword} onChange={(e) => setNewClientPassword(e.target.value)} required minLength={6} className="h-9 text-xs mt-1" />
-                  </div>
-                  <Button type="submit" variant="accent" size="sm" className="w-full text-xs font-semibold" disabled={creatingClient}>
-                    {creatingClient ? "Registering..." : "Create Client Account"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-
-            {/* Client Directory */}
-            <Card className="border-slate-200 lg:col-span-2 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2 text-slate-900">
-                  <Users className="w-5 h-5 text-emerald-600" /> Client Directory ({customers.length})
-                </CardTitle>
-                <CardDescription className="text-xs">Select a client workspace to manage documents and invoicing.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <p className="text-xs text-slate-400">Loading directory...</p>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[450px] overflow-y-auto pr-1">
-                    {customers.map((customer) => (
-                      <div
-                        key={customer.id}
-                        onClick={() => { setSelectedCustomer(customer); setAdminUploadSuccess(false); }}
-                        className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                          selectedCustomer?.id === customer.id 
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-md' 
-                            : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <p className="font-semibold text-xs truncate max-w-[180px]">{customer.email}</p>
-                          {customer.is_disabled && <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-red-100 text-red-700">DISABLED</span>}
-                        </div>
-                        <p className={`text-[10px] mt-1 ${selectedCustomer?.id === customer.id ? 'text-slate-300' : 'text-slate-400'}`}>
-                          Joined: {new Date(customer.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-          </div>
+          selectedCustomer ? (
+            <ClientWorkspace
+              client={selectedCustomer}
+              onBackToDirectory={() => setSelectedCustomer(null)}
+              documents={selectedClientDocuments}
+              invoices={selectedClientInvoices}
+              statusTracker={selectedClientStatusTracker}
+              onUploadDocument={handleAdminFileUpload}
+              onDownloadFile={handleDownloadFile}
+              onDeleteFile={handleDeleteFile}
+              onUpdateStatus={handleUpdateStatus}
+              onCreateInvoice={handleCreateInvoice}
+              onToggleInvoiceStatus={handleToggleInvoiceStatus}
+              onDeleteInvoice={handleDeleteInvoice}
+              onToggleClientAccess={handleToggleClientAccess}
+              onDeleteClient={handleDeleteCustomer}
+              togglingAccess={togglingAccess}
+              deletingClient={deletingClient}
+              savingStatus={savingStatus}
+              savingInvoice={savingInvoice}
+              firmName={organization?.name || 'Tax Shield Advisor'}
+            />
+          ) : (
+            <ClientDirectory
+              customers={customers}
+              documents={allDocuments}
+              invoices={allInvoices}
+              onSelectCustomer={(c) => setSelectedCustomer(c)}
+              onCreateCustomer={handleCreateCustomer}
+              onDeleteCustomer={handleDeleteCustomer}
+              creatingClient={creatingClient}
+              deletingClient={deletingClient}
+              loading={loading}
+            />
+          )
         )}
 
-        {/* ================= CATEGORY TAB 2: DOCUMENT CENTER ================= */}
-        {activeTab === 'documents' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Send Document Card */}
-            <Card className="border-slate-200 border-l-4 border-l-emerald-600 lg:col-span-1 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Send className="w-5 h-5 text-emerald-600" /> Deliver Document
-                </CardTitle>
-                <CardDescription className="text-xs">Upload filed returns or audit reports directly to client portal.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleAdminFileUpload} className="space-y-4">
-                  <div>
-                    <Label className="text-xs">Select File</Label>
-                    <Input type="file" onChange={(e) => { setAdminFile(e.target.files[0] || null); setAdminUploadSuccess(false); }} required className="mt-1 text-xs" />
-                  </div>
-                  <Button type="submit" variant="accent" size="sm" disabled={uploadingAdminFile || !adminFile} className="w-full text-xs">
-                    {uploadingAdminFile ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Sending...</> : <><UploadCloud className="w-3.5 h-3.5 mr-1.5" /> Deliver File</>}
-                  </Button>
-                  {adminUploadSuccess && (
-                    <div className="p-2.5 bg-emerald-50 text-emerald-800 text-xs rounded border border-emerald-200 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> Document delivered!
-                    </div>
-                  )}
-                </form>
-              </CardContent>
-            </Card>
-
-            {/* Document Directory */}
-            <Card className="border-slate-200 lg:col-span-2 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-slate-700" /> Document Directory
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                
-                {/* Received from client */}
-                <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Received From Client ({clientDocs.length})</h4>
-                  {clientDocs.length === 0 ? <p className="text-xs text-slate-400 italic">No files submitted by client yet.</p> : (
-                    <div className="divide-y divide-slate-100 bg-slate-50/50 rounded-lg border border-slate-200 px-3">
-                      {clientDocs.map((doc) => (
-                        <div key={doc.id} className="py-2.5 flex items-center justify-between gap-2">
-                          <div className="truncate">
-                            <p className="text-xs font-semibold text-slate-800 truncate">{doc.file_name}</p>
-                            <p className="text-[10px] text-slate-400">{new Date(doc.created_at).toLocaleDateString()}</p>
-                          </div>
-                          <div className="flex gap-1 shrink-0">
-                            <Button variant="outline" size="sm" onClick={() => handleDownloadFile(doc.file_url)} className="text-xs h-7 px-2"><Download className="w-3 h-3 mr-1" /> View</Button>
-                            <Button variant="outline" size="sm" onClick={() => handleDeleteFile(doc.id, doc.file_url)} className="text-xs h-7 px-2 text-red-600 border-red-200"><Trash2 className="w-3 h-3" /></Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Sent to client */}
-                <div>
-                  <h4 className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-2">Delivered to Client by Firm ({adminDocs.length})</h4>
-                  {adminDocs.length === 0 ? <p className="text-xs text-slate-400 italic">No official documents delivered yet.</p> : (
-                    <div className="divide-y divide-slate-100 bg-emerald-50/30 rounded-lg border border-emerald-100 px-3">
-                      {adminDocs.map((doc) => (
-                        <div key={doc.id} className="py-2.5 flex items-center justify-between gap-2">
-                          <div className="truncate">
-                            <p className="text-xs font-semibold text-slate-800 truncate">{doc.file_name}</p>
-                            <p className="text-[10px] text-emerald-600">Delivered {new Date(doc.created_at).toLocaleDateString()}</p>
-                          </div>
-                          <div className="flex gap-1 shrink-0">
-                            <Button variant="outline" size="sm" onClick={() => handleDownloadFile(doc.file_url)} className="text-xs h-7 px-2"><Download className="w-3 h-3 mr-1" /> View</Button>
-                            <Button variant="outline" size="sm" onClick={() => handleDeleteFile(doc.id, doc.file_url)} className="text-xs h-7 px-2 text-red-600 border-red-200"><Trash2 className="w-3 h-3" /></Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-              </CardContent>
-            </Card>
-
-          </div>
-        )}
-
-        {/* ================= CATEGORY TAB 3: WORK TRACKER ================= */}
-        {activeTab === 'status' && (
-          <Card className="border-slate-200 max-w-2xl mx-auto shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Clock className="w-5 h-5 text-emerald-600" /> Update Live Work Status
-              </CardTitle>
-              <CardDescription className="text-xs">Updates display in real-time on the client's dashboard.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleUpdateStatus} className="space-y-4">
-                <div>
-                  <Label className="text-xs font-semibold">Current Step / Milestone Title</Label>
-                  <Input placeholder="e.g. Step 2 of 4: Tax Audit Review in Progress" value={statusStep} onChange={(e) => setStatusStep(e.target.value)} required className="mt-1 text-xs" />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold">Notes for Client (Optional)</Label>
-                  <textarea 
-                    rows={3} 
-                    placeholder="e.g. Missing W-2 uploaded. Reviewing deduction forms." 
-                    value={statusNotes} 
-                    onChange={(e) => setStatusNotes(e.target.value)} 
-                    className="w-full mt-1 p-2.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500" 
-                  />
-                </div>
-                <Button type="submit" variant="accent" size="sm" disabled={savingStatus} className="w-full sm:w-auto px-6">
-                  {savingStatus ? "Publishing..." : "Update Live Status"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ================= CATEGORY TAB 4: INVOICE BUILDER ================= */}
+        {/* ================= TAB 3: ALL INVOICES (Firm-wide Ledger) ================= */}
         {activeTab === 'invoices' && (
-          <Card className="border-slate-200 shadow-sm">
-            <CardHeader className="border-b border-slate-100 pb-4">
-              <CardTitle className="text-lg flex items-center gap-2 text-slate-900">
-                <Receipt className="w-5 h-5 text-emerald-600" /> Invoices &gt; New Invoice
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-6">
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-xs font-semibold text-slate-700">Billing Entity <span className="text-red-500">*</span></Label>
-                    <select 
-                      value={billingEntity} 
-                      onChange={(e) => setBillingEntity(e.target.value)}
-                      className="w-full h-9 mt-1 rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="Non GST Billing">Non GST Billing</option>
-                      <option value="GST Billing (18%)">GST Billing (18%)</option>
-                      <option value="Corporate Tax Billing">Corporate Tax Billing</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <Label className="text-xs font-semibold text-slate-700">Target Client <span className="text-red-500">*</span></Label>
-                    <Input value={selectedCustomer?.email || ''} disabled className="h-9 text-xs bg-slate-50 mt-1 font-semibold text-slate-700" />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs font-semibold text-slate-700">Date <span className="text-red-500">*</span></Label>
-                      <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} className="h-9 text-xs mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs font-semibold text-slate-700">Invoice No. <span className="text-red-500">*</span></Label>
-                      <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} required className="h-9 text-xs mt-1 font-mono bg-slate-50" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs font-semibold text-slate-700">Payment Term <span className="text-red-500">*</span></Label>
-                      <select 
-                        value={paymentTerm} 
-                        onChange={(e) => setPaymentTerm(e.target.value)}
-                        className="w-full h-9 mt-1 rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      >
-                        <option value="NET 30">NET 30</option>
-                        <option value="NET 15">NET 15</option>
-                        <option value="NET 60">NET 60</option>
-                        <option value="Due on Receipt">Due on Receipt</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label className="text-xs font-semibold text-slate-700">Due Date <span className="text-red-500">*</span></Label>
-                      <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-9 text-xs mt-1 bg-slate-50" />
-                    </div>
-                  </div>
-                </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setInvoiceSubTab('list')}
+                  className={`text-xs px-4 py-2 rounded-lg font-semibold transition-all ${
+                    invoiceSubTab === 'list'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  All Invoices ({allInvoices.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvoiceSubTab('create')}
+                  className={`text-xs px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
+                    invoiceSubTab === 'create'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" /> Create Invoice
+                </button>
               </div>
 
-              {/* Items Table */}
-              <div className="pt-4 border-t border-slate-100">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-bold text-sm text-slate-900">Invoice Items</h4>
-                  <div className="flex items-center gap-3 text-[11px] font-medium">
-                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Task</span>
-                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Expense</span>
-                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-cyan-500"></span> Retainer</span>
-                  </div>
-                </div>
+              <span className="text-[11px] font-mono font-medium text-slate-500 hidden sm:inline pr-2">
+                Currency: ₹ (INR)
+              </span>
+            </div>
 
-                <div className="border border-slate-200 rounded-lg overflow-x-auto">
-                  <table className="w-full text-left text-xs min-w-[550px]">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-bold">
-                      <tr>
-                        <th className="p-2.5">Particulars</th>
-                        <th className="p-2.5 w-28">Type</th>
-                        <th className="p-2.5 w-28">Amount ($)</th>
-                        <th className="p-2.5 w-24">Discount ($)</th>
-                        <th className="p-2.5 w-28 text-right">Total ($)</th>
-                        <th className="p-2.5 w-10"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {items.map((item) => {
-                        const itemTotal = (parseFloat(item.amount) || 0) - (parseFloat(item.discount) || 0);
-                        return (
-                          <tr key={item.id}>
-                            <td className="p-2">
-                              <Input placeholder="Particulars" value={item.particulars} onChange={(e) => handleItemChange(item.id, 'particulars', e.target.value)} className="h-8 text-xs" required />
-                            </td>
-                            <td className="p-2">
-                              <select value={item.type} onChange={(e) => handleItemChange(item.id, 'type', e.target.value)} className="w-full h-8 rounded border border-slate-200 text-xs">
-                                <option value="Task">Task</option>
-                                <option value="Expense">Expense</option>
-                                <option value="Retainer">Retainer</option>
-                              </select>
-                            </td>
-                            <td className="p-2">
-                              <Input type="number" step="0.01" value={item.amount} onChange={(e) => handleItemChange(item.id, 'amount', e.target.value)} className="h-8 text-xs" />
-                            </td>
-                            <td className="p-2">
-                              <Input type="number" step="0.01" value={item.discount} onChange={(e) => handleItemChange(item.id, 'discount', e.target.value)} className="h-8 text-xs" />
-                            </td>
-                            <td className="p-2 text-right font-bold text-slate-800">${itemTotal.toFixed(2)}</td>
-                            <td className="p-2 text-center">
-                              <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveItem(item.id)} className="h-7 w-7 p-0 text-slate-400 hover:text-red-600">✕</Button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="mt-3 flex justify-center">
-                  <Button type="button" variant="outline" size="sm" onClick={handleAddItem} className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
-                    <Plus className="w-3.5 h-3.5" /> Add Item
-                  </Button>
-                </div>
-              </div>
-
-              {/* Bottom calculations */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100 items-start">
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-xs font-semibold text-slate-700">Remarks / Terms Notes</Label>
-                    <textarea 
-                      rows={3} 
-                      placeholder="Thank you for your business." 
-                      value={remarks} 
-                      onChange={(e) => setRemarks(e.target.value)}
-                      className="w-full mt-1 p-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="text-xs font-semibold text-slate-700">Stripe Payment Link URL <span className="text-red-500">*</span></Label>
-                    <Input type="url" placeholder="https://buy.stripe.com/..." value={stripeUrl} onChange={(e) => setStripeUrl(e.target.value)} required className="h-9 text-xs mt-1" />
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5 text-xs text-slate-700">
-                  <div className="flex justify-between items-center">
-                    <span>Subtotal</span>
-                    <span className="font-semibold text-slate-900">${calculateSubtotal().toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-slate-500">
-                    <span>Discount</span>
-                    <span>-${calculateDiscountTotal().toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span>Round Off</span>
-                    <input type="number" step="0.01" value={roundOff} onChange={(e) => setRoundOff(e.target.value)} className="w-20 h-7 text-right text-xs border border-slate-200 rounded px-1.5 bg-white" />
-                  </div>
-                  <div className="border-t border-slate-200 pt-2 flex justify-between items-center text-sm font-bold text-slate-900">
-                    <span>Total Amount</span>
-                    <span className="text-base text-emerald-700">${calculateTotalAmount().toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <Button type="button" onClick={handleCreateInvoice} variant="accent" disabled={savingInvoice} className="w-full sm:w-auto px-8">
-                  {savingInvoice ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Publishing...</> : "Save & Send Invoice to Client"}
-                </Button>
-              </div>
-
-            </CardContent>
-          </Card>
+            {invoiceSubTab === 'list' ? (
+              <InvoiceList
+                invoices={allInvoices}
+                customers={customers}
+                onToggleInvoiceStatus={handleToggleInvoiceStatus}
+                onDeleteInvoice={handleDeleteInvoice}
+                onSwitchToCreate={() => setInvoiceSubTab('create')}
+                firmName={organization?.name || 'Tax Shield Advisor'}
+              />
+            ) : (
+              <InvoiceBuilder
+                customers={customers}
+                selectedCustomer={selectedCustomer}
+                onSelectCustomer={setSelectedCustomer}
+                onCreateInvoice={handleCreateInvoice}
+                onBackToList={() => setInvoiceSubTab('list')}
+                savingInvoice={savingInvoice}
+              />
+            )}
+          </div>
         )}
 
+        {/* ================= TAB 4: GLOBAL DOCUMENTS (Master Audit Vault) ================= */}
+        {activeTab === 'documents' && (
+          <DocumentCenter
+            customers={customers}
+            documents={allDocuments}
+            onUploadAdminDocument={handleAdminFileUpload}
+            onDownloadFile={handleDownloadFile}
+            onDeleteFile={handleDeleteFile}
+          />
+        )}
       </main>
 
       {/* Mobile App Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 text-white border-t border-slate-800 z-40 flex items-center justify-around h-16 px-2">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 text-white border-t border-slate-800 z-40 flex items-center justify-around h-16 px-2 shadow-2xl">
         <button
-          onClick={() => setActiveTab('clients')}
-          className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${activeTab === 'clients' ? 'text-emerald-400 font-bold' : 'text-slate-400'}`}
+          onClick={() => {
+            setActiveTab('overview');
+            setSelectedCustomer(null);
+          }}
+          className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
+            activeTab === 'overview' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5" /> Overview
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('clients');
+          }}
+          className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
+            activeTab === 'clients' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+          }`}
         >
           <Users className="w-5 h-5" /> Clients
         </button>
         <button
-          onClick={() => setActiveTab('documents')}
-          className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${activeTab === 'documents' ? 'text-emerald-400 font-bold' : 'text-slate-400'}`}
+          onClick={() => {
+            setActiveTab('invoices');
+            setSelectedCustomer(null);
+          }}
+          className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
+            activeTab === 'invoices' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+          }`}
         >
-          <FolderOpen className="w-5 h-5" /> Docs
+          <Receipt className="w-5 h-5" /> Invoices
         </button>
         <button
-          onClick={() => setActiveTab('status')}
-          className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${activeTab === 'status' ? 'text-emerald-400 font-bold' : 'text-slate-400'}`}
+          onClick={() => {
+            setActiveTab('documents');
+            setSelectedCustomer(null);
+          }}
+          className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
+            activeTab === 'documents' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+          }`}
         >
-          <Clock className="w-5 h-5" /> Status
-        </button>
-        <button
-          onClick={() => setActiveTab('invoices')}
-          className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${activeTab === 'invoices' ? 'text-emerald-400 font-bold' : 'text-slate-400'}`}
-        >
-          <Receipt className="w-5 h-5" /> Invoice
+          <FolderOpen className="w-5 h-5" /> Vault
         </button>
       </nav>
-
     </div>
   );
 }

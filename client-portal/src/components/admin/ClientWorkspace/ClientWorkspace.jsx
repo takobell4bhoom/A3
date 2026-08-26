@@ -25,6 +25,7 @@ export default function ClientWorkspace({
   onDeleteInvoice,
   onToggleClientAccess,
   onDeleteClient,
+  onUpdateClient,
   togglingAccess = false,
   deletingClient = false,
   savingStatus = false,
@@ -234,6 +235,7 @@ export default function ClientWorkspace({
       {workspaceTab === 'profile' && (
         <ClientProfileTab
           client={client}
+          onUpdateClient={onUpdateClient}
           onToggleAccess={onToggleClientAccess}
           onDeleteClient={onDeleteClient}
           togglingAccess={togglingAccess}

@@ -1,95 +1,159 @@
 import { Button } from '@/components/ui/button';
-import { Building2, LogOut, Users, FolderOpen, Receipt, LayoutDashboard } from 'lucide-react';
+import { Users, FolderOpen, Receipt, LayoutDashboard, KeyRound, Settings, LogOut } from 'lucide-react';
 
 export default function AdminHeader({
   firmName = 'Tax Shield Advisor',
+  logoUrl,
   userEmail,
   activeTab,
   setActiveTab,
   documentCount = 0,
+  maxLicenses = 25,
+  soldLicensesCount = 0,
+  isOwner = false,
+  isDistributor = false,
   onSignOut,
 }) {
+  const usagePercent = Math.min(100, Math.round((soldLicensesCount / maxLicenses) * 100));
+
   return (
-    <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-16">
+    <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 shadow-[0_1px_3px_0_rgba(0,0,0,0.02),0_1px_2px_-1px_rgba(0,0,0,0.02)]">
+      <div className="max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-18 sm:h-20 gap-3 lg:gap-6">
           
-          {/* Brand Logo & Title */}
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-slate-800 text-emerald-400 border border-slate-700 shadow-sm">
-              <Building2 className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-sm sm:text-base tracking-tight text-white">{firmName}</span>
-                <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/80">
-                  Enterprise
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400 font-mono hidden sm:block">Advisory Console</p>
-            </div>
+          {/* Brand Logo (Prominent, Dynamic & Responsive) */}
+          <div className="flex items-center shrink-0 py-1">
+            {logoUrl ? (
+              <img 
+                src={logoUrl} 
+                alt={firmName} 
+                className="h-10 sm:h-11 md:h-12 lg:h-13 w-auto max-w-[150px] sm:max-w-[180px] md:max-w-[210px] lg:max-w-[240px] object-contain shrink-0 transition-all drop-shadow-2xs" 
+              />
+            ) : (
+              <img 
+                src="/taxshield-logo.jpg" 
+                alt="Taxshield Advisor" 
+                className="h-10 sm:h-11 md:h-12 lg:h-13 w-auto max-w-[150px] sm:max-w-[180px] md:max-w-[210px] lg:max-w-[240px] object-contain shrink-0 transition-all drop-shadow-2xs" 
+              />
+            )}
           </div>
 
-          {/* Desktop Navigation Tabs */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-950/50 p-1 rounded-xl border border-slate-800/80">
+          {/* Desktop Enterprise Segmented Navigation (Fluid & responsive across laptop/desktop sizes) */}
+          <nav className="hidden md:flex items-center gap-0.5 lg:gap-1 bg-slate-100/90 p-1 lg:p-1.5 rounded-2xl border border-slate-200/70 shadow-inner shrink min-w-0 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`text-xs px-3.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+              className={`text-[11px] lg:text-xs px-2.5 lg:px-3.5 py-1.5 lg:py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 lg:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'overview'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              <LayoutDashboard className="w-3.5 h-3.5" /> Overview
+              <LayoutDashboard className="w-3.5 h-3.5 lg:w-4 lg:h-4 shrink-0" /> 
+              <span>Overview</span>
             </button>
 
             <button
               onClick={() => setActiveTab('clients')}
-              className={`text-xs px-3.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+              className={`text-[11px] lg:text-xs px-2.5 lg:px-3.5 py-1.5 lg:py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 lg:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'clients'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              <Users className="w-3.5 h-3.5" /> Clients &amp; Workspaces
+              <Users className="w-3.5 h-3.5 lg:w-4 lg:h-4 shrink-0" /> 
+              <span className="hidden xl:inline">{isDistributor ? 'Clients & Workspaces' : 'Client Directory'}</span>
+              <span className="xl:hidden">Clients</span>
             </button>
 
             <button
               onClick={() => setActiveTab('invoices')}
-              className={`text-xs px-3.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+              className={`text-[11px] lg:text-xs px-2.5 lg:px-3.5 py-1.5 lg:py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 lg:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'invoices'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              <Receipt className="w-3.5 h-3.5" /> All Invoices
+              <Receipt className="w-3.5 h-3.5 lg:w-4 lg:h-4 shrink-0" /> 
+              <span>Invoices</span>
             </button>
 
+            {/* Documents Vault (Distributor Only) */}
+            {isDistributor && (
+              <button
+                onClick={() => setActiveTab('documents')}
+                className={`text-[11px] lg:text-xs px-2.5 lg:px-3.5 py-1.5 lg:py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 lg:gap-2 whitespace-nowrap shrink-0 ${
+                  activeTab === 'documents'
+                    ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <FolderOpen className="w-3.5 h-3.5 lg:w-4 lg:h-4 shrink-0" /> 
+                <span>Vault</span>
+                <span className="text-[10px] opacity-75 font-mono">({documentCount})</span>
+              </button>
+            )}
+
+            {/* Dedicated Tab for Selling and Managing Company Licenses (Distributor Only) */}
+            {isDistributor && (
+              <button
+                onClick={() => setActiveTab('licenses')}
+                className={`text-[11px] lg:text-xs px-2.5 lg:px-3.5 py-1.5 lg:py-2 rounded-xl transition-all flex items-center gap-1.5 lg:gap-2 whitespace-nowrap shrink-0 ${
+                  activeTab === 'licenses'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm font-extrabold'
+                    : 'text-amber-800 bg-amber-50/90 hover:bg-amber-100 border border-amber-200/80 font-bold'
+                }`}
+              >
+                <KeyRound className="w-3.5 h-3.5 lg:w-4 lg:h-4 shrink-0" /> 
+                <span className="hidden xl:inline">Sell Licenses</span>
+                <span className="xl:hidden">Licenses</span>
+              </button>
+            )}
+
+            {/* Dedicated Settings & Security Tab for Everyone */}
             <button
-              onClick={() => setActiveTab('documents')}
-              className={`text-xs px-3.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === 'documents'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+              onClick={() => setActiveTab('settings')}
+              className={`text-[11px] lg:text-xs px-2.5 lg:px-3.5 py-1.5 lg:py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 lg:gap-2 whitespace-nowrap shrink-0 ${
+                activeTab === 'settings'
+                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              <FolderOpen className="w-3.5 h-3.5" /> Global Documents ({documentCount})
+              <Settings className="w-3.5 h-3.5 lg:w-4 lg:h-4 shrink-0" /> 
+              <span>Settings</span>
             </button>
           </nav>
 
-          {/* User Email & Sign Out */}
-          <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <p className="text-xs font-semibold text-slate-200 truncate max-w-[180px]">{userEmail}</p>
-              <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Firm Administrator</p>
+          {/* Right Controls: Quota & User Controls */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            
+            {/* Live License Quota Counter (Distributor Only) */}
+            {isDistributor && (
+              <div 
+                onClick={() => setActiveTab('licenses')}
+                className="hidden lg:flex items-center gap-2 bg-sky-50/80 hover:bg-sky-100/80 border border-sky-200 text-sky-900 rounded-xl px-2.5 lg:px-3.5 py-1.5 text-xs font-semibold cursor-pointer transition-all shadow-xs shrink-0"
+                title="Click to view license pool"
+              >
+                <span className="text-slate-500 font-medium hidden xl:inline">Licenses:</span>
+                <span className={`font-mono font-bold ${usagePercent >= 90 ? 'text-rose-600' : 'text-sky-700'}`}>
+                  {soldLicensesCount} / {maxLicenses}
+                </span>
+              </div>
+            )}
+
+            <div className="text-right hidden 2xl:block border-l border-slate-200 pl-3">
+              <p className="text-xs font-bold text-slate-800 truncate max-w-[150px]">{userEmail}</p>
+              <p className="text-[10px] text-slate-500 font-medium">
+                {isOwner ? 'Master Access' : isDistributor ? 'Distributor Admin' : 'Company Admin'}
+              </p>
             </div>
+
             <Button
               variant="outline"
               size="sm"
               onClick={onSignOut}
-              className="text-xs border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 h-8 gap-1.5"
+              className="text-xs border-slate-200 bg-white text-slate-600 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 rounded-xl h-8 sm:h-9 px-2.5 sm:px-3 gap-1.5 transition-colors shadow-xs shrink-0"
             >
-              <LogOut className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Sign Out</span>
+              <LogOut className="w-3.5 h-3.5 shrink-0" /> <span className="hidden sm:inline">Sign Out</span>
             </Button>
           </div>
 

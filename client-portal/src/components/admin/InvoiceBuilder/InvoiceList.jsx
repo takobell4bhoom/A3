@@ -9,7 +9,7 @@ import { formatDate } from '@/lib/dateUtils';
 import InvoicePreviewModal from './InvoicePreviewModal';
 import { 
   Receipt, Search, X, CheckCircle, Clock, Copy, Printer, 
-  Trash2, Plus
+  Trash2, Plus, ChevronLeft, ChevronRight 
 } from 'lucide-react';
 
 export default function InvoiceList({
@@ -18,10 +18,13 @@ export default function InvoiceList({
   onToggleInvoiceStatus,
   onDeleteInvoice,
   onSwitchToCreate,
+  organization,
   firmName = 'Tax Shield Advisor',
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'unpaid' | 'paid'
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [previewInvoice, setPreviewInvoice] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -75,6 +78,15 @@ export default function InvoiceList({
       return matchesSearch && matchesStatus;
     });
   }, [invoices, customerMap, searchQuery, statusFilter]);
+
+  // Paginated Slice for high-performance rendering (Prevents DOM overload at 1000s of invoices)
+  const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / pageSize));
+  const effectivePage = Math.min(currentPage, totalPages);
+  
+  const paginatedInvoices = useMemo(() => {
+    const start = (effectivePage - 1) * pageSize;
+    return filteredInvoices.slice(start, start + pageSize);
+  }, [filteredInvoices, effectivePage, pageSize]);
 
   const handleCopyLink = (url) => {
     if (!url) {
@@ -256,7 +268,7 @@ export default function InvoiceList({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredInvoices.map((inv) => {
+                {paginatedInvoices.map((inv) => {
                   const client = customerMap.get(inv.user_id);
                   const total = inv.total_cents ? inv.total_cents / 100 : Number(inv.amount || 0);
                   const clientEmail = client?.email || inv.client_email || 'Client';
@@ -357,6 +369,65 @@ export default function InvoiceList({
             </table>
           )}
         </div>
+
+        {/* Pagination Toolbar */}
+        {filteredInvoices.length > 0 && (
+          <div className="p-3.5 sm:p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <span>
+                Showing <strong className="text-slate-900 font-mono">{(effectivePage - 1) * pageSize + 1}</strong> to{' '}
+                <strong className="text-slate-900 font-mono">{Math.min(effectivePage * pageSize, filteredInvoices.length)}</strong> of{' '}
+                <strong className="text-slate-900 font-mono">{filteredInvoices.length}</strong> invoices
+              </span>
+
+              <div className="flex items-center gap-1 pl-2 border-l border-slate-200">
+                <span className="text-[11px]">Rows:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="h-7 rounded border border-slate-200 bg-white px-1.5 text-xs text-slate-900 focus:outline-none"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <span className="text-[11px] font-mono font-medium">
+                Page {effectivePage} of {totalPages}
+              </span>
+
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={effectivePage <= 1}
+                  className="h-7 w-7 p-0"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={effectivePage >= totalPages}
+                  className="h-7 w-7 p-0"
+                  title="Next Page"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Invoice Preview / Print Modal */}
@@ -366,6 +437,7 @@ export default function InvoiceList({
           onClose={() => setPreviewInvoice(null)}
           invoice={previewInvoice.invoice}
           client={previewInvoice.client}
+          organization={organization}
           firmName={firmName}
         />
       )}

@@ -13,7 +13,7 @@ export const ALLOWED_FILE_TYPES = [
   'text/plain',
 ];
 
-export const MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024; // 500MB
+export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB (Standard safe single-file upload limit)
 
 /**
  * Validates a file before upload
@@ -26,15 +26,15 @@ export function validateFile(file) {
   }
 
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    return { valid: false, error: 'File size exceeds maximum limit of 500MB.' };
+    return { valid: false, error: `File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the 50MB maximum limit. Please compress or split the file.` };
   }
 
   // Check extension as secondary fallback
   const extension = file.name.split('.').pop().toLowerCase();
-  const allowedExtensions = ['pdf', 'xlsx', 'xls', 'docx', 'doc', 'png', 'jpg', 'jpeg', 'webp', 'csv', 'txt'];
+  const allowedExtensions = ['pdf', 'xlsx', 'xls', 'docx', 'doc', 'png', 'jpg', 'jpeg', 'webp', 'csv', 'txt', 'zip'];
   
   if (!allowedExtensions.includes(extension)) {
-    return { valid: false, error: `File type .${extension} is not supported. Please upload PDF, Office documents, or images.` };
+    return { valid: false, error: `File type .${extension} is not supported. Please upload PDF, Office documents, spreadsheets, images, or ZIP files.` };
   }
 
   return { valid: true };

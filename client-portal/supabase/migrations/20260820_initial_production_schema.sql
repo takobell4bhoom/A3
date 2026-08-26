@@ -222,6 +222,10 @@ CREATE POLICY "Admins can insert users in their organization"
         OR (public.is_admin() AND organization_id = public.current_org_id())
     );
 
+CREATE POLICY "Admins can delete users in their organization"
+    ON public.users FOR DELETE
+    USING (public.is_admin() AND organization_id = public.current_org_id());
+
 -- ==================== Status Tracker ====================
 CREATE POLICY "Clients can view their own status; Admins view all org statuses"
     ON public.status_tracker FOR SELECT

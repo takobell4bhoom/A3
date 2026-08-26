@@ -8,24 +8,47 @@ import { getSecureDocumentUrl, generateSecureFilePath } from '@/lib/storage';
 import AdminHeader from './admin/AdminHeader';
 import OverviewDashboard from './admin/OverviewDashboard';
 import ClientDirectory from './admin/ClientDirectory';
+import ClientOnboardingPage from './admin/ClientOnboardingPage';
 import ClientWorkspace from './admin/ClientWorkspace/ClientWorkspace';
 import DocumentCenter from './admin/DocumentCenter';
 import InvoiceBuilder from './admin/InvoiceBuilder/InvoiceBuilder';
 import InvoiceList from './admin/InvoiceBuilder/InvoiceList';
+import DistributorLicenseHub from './admin/DistributorLicenses/DistributorLicenseHub';
+import CompanySettings from './admin/CompanySettings/CompanySettings';
 
-import { Users, FolderOpen, Receipt, LayoutDashboard, Plus } from 'lucide-react';
+import { Users, FolderOpen, Receipt, LayoutDashboard, KeyRound, Settings, Plus } from 'lucide-react';
 
 export default function AdminDashboard({ session }) {
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'clients' | 'invoices' | 'documents'
+  const { organization, profile, isOwner, isDistributor, signOut } = useAuth();
+  const toast = useToast();
+
+  const [activeTab, setActiveTabState] = useState(() => {
+    try {
+      return sessionStorage.getItem('admin_active_tab') || 'overview';
+    } catch {
+      return 'overview';
+    }
+  });
+
+  const setActiveTab = (tab) => {
+    try {
+      sessionStorage.setItem('admin_active_tab', tab);
+    } catch (e) {
+      console.warn('Failed to save tab in sessionStorage', e);
+    }
+    setActiveTabState(tab);
+  };
   const [invoiceSubTab, setInvoiceSubTab] = useState('list'); // 'list' | 'create'
 
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null); // null means viewing ClientDirectory CRM table
+  const [isCreatingClient, setIsCreatingClient] = useState(false); // true means viewing full-page onboarding screen
   const [allDocuments, setAllDocuments] = useState([]);
   const [allInvoices, setAllInvoices] = useState([]);
   const [statusTrackerMap, setStatusTrackerMap] = useState({});
+  const [soldCompanies, setSoldCompanies] = useState([]);
 
-  // Loading and action states
+  const [firmOrg, setFirmOrg] = useState(organization || null);
   const [loading, setLoading] = useState(true);
   const [creatingClient, setCreatingClient] = useState(false);
   const [deletingClient, setDeletingClient] = useState(false);
@@ -33,18 +56,56 @@ export default function AdminDashboard({ session }) {
   const [savingInvoice, setSavingInvoice] = useState(false);
   const [togglingAccess, setTogglingAccess] = useState(false);
 
-  const { organization, signOut } = useAuth();
-  const toast = useToast();
+  // Strictly resolve the active tenant organization ID from user profile / auth
+  const orgId = organization?.id || profile?.organization_id || firmOrg?.id || null;
 
   // Load All Clients, All Documents, All Invoices, All Status Trackers
+  // (Supports Downward Visibility for Distributors & Strict Scoping for Buyers)
   const refreshGlobalData = useCallback(async () => {
+    if (!orgId) return;
     try {
+      // 0. Fetch Live Organization Record
+      const { data: orgData } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('id', orgId)
+        .maybeSingle();
+
+      if (orgData) {
+        setFirmOrg(orgData);
+      }
+
+      // Determine organization scope:
+      // If Distributor: Own Org + All Buyer Organizations under them
+      // If Buyer: Strictly Own Org
+      let orgScopeIds = [orgId];
+      if (isDistributor && session?.user?.id) {
+        const { data: buyerOrgs } = await supabase
+          .from('organizations')
+          .select('*')
+          .eq('distributor_user_id', session.user.id);
+
+        if (buyerOrgs && buyerOrgs.length > 0) {
+          setSoldCompanies(buyerOrgs);
+          orgScopeIds = [orgId, ...buyerOrgs.map(b => b.id)];
+        } else {
+          setSoldCompanies([]);
+        }
+      }
+
       // 1. Fetch Clients
-      const { data: usersData, error: usersError } = await supabase
+      let usersQuery = supabase
         .from('users')
         .select('*')
-        .eq('role', 'customer')
-        .order('created_at', { ascending: false });
+        .eq('role', 'customer');
+
+      if (orgScopeIds.length === 1) {
+        usersQuery = usersQuery.eq('organization_id', orgScopeIds[0]);
+      } else {
+        usersQuery = usersQuery.in('organization_id', orgScopeIds);
+      }
+
+      const { data: usersData, error: usersError } = await usersQuery.order('created_at', { ascending: false });
 
       if (usersError) throw usersError;
       if (usersData) {
@@ -54,10 +115,13 @@ export default function AdminDashboard({ session }) {
       }
 
       // 2. Fetch All Documents
-      const { data: docsData, error: docsError } = await supabase
-        .from('documents')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let docsQuery = supabase.from('documents').select('*');
+      if (orgScopeIds.length === 1) {
+        docsQuery = docsQuery.eq('organization_id', orgScopeIds[0]);
+      } else {
+        docsQuery = docsQuery.in('organization_id', orgScopeIds);
+      }
+      const { data: docsData, error: docsError } = await docsQuery.order('created_at', { ascending: false });
 
       if (docsError) throw docsError;
       if (docsData) {
@@ -65,10 +129,13 @@ export default function AdminDashboard({ session }) {
       }
 
       // 3. Fetch All Invoices
-      const { data: invoicesData, error: invoicesError } = await supabase
-        .from('invoices')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let invoicesQuery = supabase.from('invoices').select('*');
+      if (orgScopeIds.length === 1) {
+        invoicesQuery = invoicesQuery.eq('organization_id', orgScopeIds[0]);
+      } else {
+        invoicesQuery = invoicesQuery.in('organization_id', orgScopeIds);
+      }
+      const { data: invoicesData, error: invoicesError } = await invoicesQuery.order('created_at', { ascending: false });
 
       if (invoicesError) throw invoicesError;
       if (invoicesData) {
@@ -76,9 +143,13 @@ export default function AdminDashboard({ session }) {
       }
 
       // 4. Fetch All Status Trackers
-      const { data: statuses, error: statusError } = await supabase
-        .from('status_tracker')
-        .select('*');
+      let statusQuery = supabase.from('status_tracker').select('*');
+      if (orgScopeIds.length === 1) {
+        statusQuery = statusQuery.eq('organization_id', orgScopeIds[0]);
+      } else {
+        statusQuery = statusQuery.in('organization_id', orgScopeIds);
+      }
+      const { data: statuses, error: statusError } = await statusQuery;
 
       if (statusError) throw statusError;
       if (statuses) {
@@ -91,44 +162,94 @@ export default function AdminDashboard({ session }) {
     } catch (err) {
       console.error('Error loading firm data:', err);
     }
-  }, []);
+  }, [orgId, isDistributor, session]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadInitial() {
+      if (!orgId) {
+        if (isMounted) setLoading(false);
+        return;
+      }
+
       try {
-        const { data: usersData } = await supabase
+        // 0. Live Organization Data
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('*')
+          .eq('id', orgId)
+          .maybeSingle();
+
+        if (isMounted && orgData) {
+          setFirmOrg(orgData);
+        }
+
+        // Determine org scope
+        let orgScopeIds = [orgId];
+        if (isDistributor && session?.user?.id) {
+          const { data: buyerOrgs } = await supabase
+            .from('organizations')
+            .select('id')
+            .eq('distributor_user_id', session.user.id);
+
+          if (buyerOrgs && buyerOrgs.length > 0) {
+            orgScopeIds = [orgId, ...buyerOrgs.map(b => b.id)];
+          }
+        }
+
+        // 1. Clients
+        let usersQuery = supabase
           .from('users')
           .select('*')
-          .eq('role', 'customer')
-          .order('created_at', { ascending: false });
+          .eq('role', 'customer');
+
+        if (orgScopeIds.length === 1) {
+          usersQuery = usersQuery.eq('organization_id', orgScopeIds[0]);
+        } else {
+          usersQuery = usersQuery.in('organization_id', orgScopeIds);
+        }
+
+        const { data: usersData } = await usersQuery.order('created_at', { ascending: false });
 
         if (isMounted && usersData) {
           setCustomers(usersData);
         }
 
-        const { data: docsData } = await supabase
-          .from('documents')
-          .select('*')
-          .order('created_at', { ascending: false });
+        // 2. Documents
+        let docsQuery = supabase.from('documents').select('*');
+        if (orgScopeIds.length === 1) {
+          docsQuery = docsQuery.eq('organization_id', orgScopeIds[0]);
+        } else {
+          docsQuery = docsQuery.in('organization_id', orgScopeIds);
+        }
+        const { data: docsData } = await docsQuery.order('created_at', { ascending: false });
 
         if (isMounted && docsData) {
           setAllDocuments(docsData);
         }
 
-        const { data: invoicesData } = await supabase
-          .from('invoices')
-          .select('*')
-          .order('created_at', { ascending: false });
+        // 3. Invoices
+        let invoicesQuery = supabase.from('invoices').select('*');
+        if (orgScopeIds.length === 1) {
+          invoicesQuery = invoicesQuery.eq('organization_id', orgScopeIds[0]);
+        } else {
+          invoicesQuery = invoicesQuery.in('organization_id', orgScopeIds);
+        }
+        const { data: invoicesData } = await invoicesQuery.order('created_at', { ascending: false });
 
         if (isMounted && invoicesData) {
           setAllInvoices(invoicesData);
         }
 
-        const { data: statuses } = await supabase
-          .from('status_tracker')
-          .select('*');
+        // 4. Status Trackers
+        let statusQuery = supabase.from('status_tracker').select('*');
+        if (orgScopeIds.length === 1) {
+          statusQuery = statusQuery.eq('organization_id', orgScopeIds[0]);
+        } else {
+          statusQuery = statusQuery.in('organization_id', orgScopeIds);
+        }
+        const { data: statuses } = await statusQuery;
 
         if (isMounted && statuses) {
           const map = {};
@@ -146,15 +267,58 @@ export default function AdminDashboard({ session }) {
 
     loadInitial();
 
+    if (!orgId) return;
+
+    // Listen to realtime updates strictly on current organization
+    const orgSubscription = supabase
+      .channel(`public:organizations:${orgId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'organizations', filter: `id=eq.${orgId}` },
+        (payload) => {
+          if (payload.new) {
+            setFirmOrg(payload.new);
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       isMounted = false;
+      supabase.removeChannel(orgSubscription);
     };
-  }, []);
+  }, [orgId, isDistributor, session?.user?.id]);
 
-  // Client Onboarding Handler
-  const handleCreateCustomer = async ({ email, password, fullName }) => {
+  // Comprehensive Client Onboarding Handler
+  const handleCreateCustomer = async (clientPayload) => {
     setCreatingClient(true);
     try {
+      const { 
+        email, 
+        password, 
+        fullName, 
+        phone, 
+        fileNo, 
+        clientType, 
+        clientGroup, 
+        pan, 
+        gstin, 
+        billingProfile, 
+        contactPerson, 
+        dob, 
+        secondaryMobile, 
+        contactEmail, 
+        address, 
+        city, 
+        pincode, 
+        state, 
+        isActive, 
+        hasOpeningBalance, 
+        openingBalance, 
+        openingBalanceType,
+        photoUrl
+      } = clientPayload;
+
       const tempSupabase = createClient(
         import.meta.env.VITE_SUPABASE_URL,
         import.meta.env.VITE_SUPABASE_ANON_KEY,
@@ -167,18 +331,82 @@ export default function AdminDashboard({ session }) {
         options: {
           data: {
             full_name: fullName,
+            phone: phone || undefined,
             role: 'customer',
+            organization_id: orgId,
+            file_no: fileNo,
+            client_type: clientType,
+            client_group: clientGroup,
+            pan: pan,
+            gstin: gstin,
+            billing_profile: billingProfile,
+            contact_person: contactPerson,
+            date_of_birth: dob,
+            secondary_mobile: secondaryMobile,
+            contact_email: contactEmail,
+            address: address,
+            city: city,
+            pincode: pincode,
+            state: state,
+            is_active: isActive !== false,
+            opening_balance: hasOpeningBalance ? openingBalance : 0,
+            opening_balance_type: openingBalanceType || 'Dr',
+            avatar_url: photoUrl,
           },
         },
       });
 
       if (error) throw error;
 
-      toast.success('Client Onboarded', `Account created for ${email}. Client may now log in.`);
+      // Update public.users record with organization_id
+      if (data?.user?.id) {
+        await supabase
+          .from('users')
+          .update({
+            full_name: fullName,
+            phone: phone || undefined,
+            organization_id: orgId,
+            is_disabled: !isActive,
+          })
+          .eq('id', data.user.id);
+      }
+
+      // If opening balance exists, automatically issue an opening balance ledger invoice
+      if (hasOpeningBalance && Number(openingBalance) > 0 && data?.user?.id) {
+        const openingBalanceCents = Math.round(Number(openingBalance) * 100);
+        await supabase.from('invoices').insert([{
+          user_id: data.user.id,
+          organization_id: orgId,
+          invoice_no: `OPN-${Date.now().toString().slice(-6)}`,
+          billing_entity: 'Opening Balance Ledger',
+          issue_date: new Date().toISOString().split('T')[0],
+          subtotal_cents: openingBalanceCents,
+          total_cents: openingBalanceCents,
+          amount: Number(openingBalance),
+          status: 'unpaid',
+          items: [{
+            title: `Opening Balance (${openingBalanceType === 'Dr' ? 'Debit / Receivable' : 'Credit / Advance'})`,
+            description: `Initial ledger opening balance configured during client registration`,
+            quantity: 1,
+            rate: Number(openingBalance),
+            amount: Number(openingBalance),
+          }],
+        }]);
+      }
+
+      toast.success('Client Onboarded', `Profile created for ${email}. Client workspace initialized.`);
       await refreshGlobalData();
+
       if (data?.user) {
-        const newClient = { id: data.user.id, email, full_name: fullName, is_disabled: false };
+        const newClient = {
+          id: data.user.id,
+          email,
+          full_name: fullName,
+          phone: phone || null,
+          is_disabled: !isActive,
+        };
         setSelectedCustomer(newClient);
+        setIsCreatingClient(false);
         setActiveTab('clients');
       }
       return true;
@@ -187,6 +415,35 @@ export default function AdminDashboard({ session }) {
       return false;
     } finally {
       setCreatingClient(false);
+    }
+  };
+
+  // Update Client Profile Handler
+  const handleUpdateClient = async (updatedData) => {
+    try {
+      const { id, full_name, phone, is_disabled } = updatedData;
+      
+      const { error } = await supabase
+        .from('users')
+        .update({
+          full_name: full_name,
+          phone: phone || null,
+          is_disabled: Boolean(is_disabled),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      const merged = { ...selectedCustomer, ...updatedData };
+      setSelectedCustomer(merged);
+      setCustomers(prev => prev.map(c => c.id === id ? merged : c));
+
+      toast.success('Profile Saved', `Updated details for ${full_name || selectedCustomer?.email}.`);
+      return true;
+    } catch (err) {
+      toast.error('Update Failed', err.message || 'Could not update client profile.');
+      return false;
     }
   };
 
@@ -219,21 +476,31 @@ export default function AdminDashboard({ session }) {
     }
   };
 
-  // Delete Customer Handler
+  // Delete Customer Handler (Safely purges child records first to prevent foreign key errors)
   const handleDeleteCustomer = async (customerId) => {
     if (!customerId) return;
     setDeletingClient(true);
 
     try {
-      // 1. Delete records from database (cascades to documents, status_tracker, invoices)
-      const { error: dbError } = await supabase
-        .from('users')
+      // 1. Delete child status tracker record
+      await supabase
+        .from('status_tracker')
         .delete()
-        .eq('id', customerId);
+        .eq('user_id', customerId);
 
-      if (dbError) throw dbError;
+      // 2. Delete child invoices
+      await supabase
+        .from('invoices')
+        .delete()
+        .eq('user_id', customerId);
 
-      // 2. Storage files cleanup
+      // 3. Delete child document metadata
+      await supabase
+        .from('documents')
+        .delete()
+        .eq('user_id', customerId);
+
+      // 4. Delete storage files
       try {
         const { data: files } = await supabase.storage
           .from('customer-documents')
@@ -247,7 +514,15 @@ export default function AdminDashboard({ session }) {
         console.warn('Storage cleanup non-fatal warning:', storageErr);
       }
 
-      // 3. Optimistic state updates
+      // 5. Delete parent user row from users table
+      const { error: dbError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', customerId);
+
+      if (dbError) throw dbError;
+
+      // 6. Optimistic state updates
       setCustomers(prev => prev.filter(c => c.id !== customerId));
       setAllDocuments(prev => prev.filter(d => d.user_id !== customerId));
       setAllInvoices(prev => prev.filter(i => i.user_id !== customerId));
@@ -256,7 +531,7 @@ export default function AdminDashboard({ session }) {
         setSelectedCustomer(null);
       }
 
-      toast.success('Client Deleted', 'Client account and associated records permanently removed.');
+      toast.success('Client Deleted', 'Client account and all associated records permanently removed.');
     } catch (err) {
       toast.error('Deletion Failed', err.message || 'Could not delete client.');
     } finally {
@@ -285,12 +560,14 @@ export default function AdminDashboard({ session }) {
         .from('documents')
         .insert([{
           user_id: targetCustomerId,
+          organization_id: orgId,
           file_name: adminFile.name,
           file_url: filePath,
           file_size_bytes: adminFile.size,
           mime_type: adminFile.type || 'application/octet-stream',
           upload_status: 'completed',
           uploaded_by_role: 'admin',
+          uploaded_by_user_id: session?.user?.id,
         }])
         .select()
         .single();
@@ -347,8 +624,10 @@ export default function AdminDashboard({ session }) {
     try {
       const { error } = await supabase.from('status_tracker').upsert({
         user_id: targetCustomerId,
+        organization_id: orgId,
         current_step: step,
         notes: notes,
+        updated_by: session?.user?.id,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
@@ -359,7 +638,7 @@ export default function AdminDashboard({ session }) {
       
       setStatusTrackerMap(prev => ({
         ...prev,
-        [targetCustomerId]: { user_id: targetCustomerId, current_step: step, notes, updated_at: new Date().toISOString() }
+        [targetCustomerId]: { user_id: targetCustomerId, organization_id: orgId, current_step: step, notes, updated_at: new Date().toISOString() }
       }));
     } catch (err) {
       toast.error('Status Error', err.message);
@@ -372,7 +651,10 @@ export default function AdminDashboard({ session }) {
   const handleCreateInvoice = async (invoicePayload) => {
     setSavingInvoice(true);
     try {
-      const { error } = await supabase.from('invoices').insert([invoicePayload]);
+      const { error } = await supabase.from('invoices').insert([{
+        ...invoicePayload,
+        organization_id: orgId,
+      }]);
       if (error) throw error;
 
       toast.success(
@@ -436,25 +718,36 @@ export default function AdminDashboard({ session }) {
     ? statusTrackerMap[selectedCustomer.id] || null 
     : null;
 
+  const activeMaxLicenses = Number(firmOrg?.max_licenses ?? organization?.max_licenses ?? 25);
+  const activeFirmName = firmOrg?.name || organization?.name || 'Tax Shield Advisor';
+  const soldLicensesCount = soldCompanies.length;
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 pb-20 md:pb-8 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 pb-24 md:pb-12 flex flex-col font-sans selection:bg-sky-100 selection:text-sky-900">
       {/* Top Enterprise Header */}
       <AdminHeader
-        firmName={organization?.name || 'Tax Shield Advisor'}
+        firmName={activeFirmName}
+        logoUrl={firmOrg?.logo_url || organization?.logo_url}
         userEmail={session?.user?.email}
         activeTab={activeTab}
         setActiveTab={(tab) => {
           setActiveTab(tab);
           if (tab !== 'clients') {
             setSelectedCustomer(null);
+            setIsCreatingClient(false);
           }
         }}
         documentCount={allDocuments.length}
+        clientCount={customers.length}
+        maxLicenses={activeMaxLicenses}
+        soldLicensesCount={soldLicensesCount}
+        isOwner={isOwner}
+        isDistributor={isDistributor}
         onSignOut={signOut}
       />
 
-      {/* Main Workspace Canvas */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">
+      {/* Main Enterprise Workspace Canvas (Widescreen Fluid Layout) */}
+      <main className="max-w-[1600px] w-full mx-auto px-4 sm:px-8 lg:px-10 py-8 flex-1 space-y-8">
         
         {/* ================= TAB 1: EXECUTIVE OVERVIEW ================= */}
         {activeTab === 'overview' && (
@@ -464,19 +757,37 @@ export default function AdminDashboard({ session }) {
             invoices={allInvoices}
             onSelectClient={(c) => {
               setSelectedCustomer(c);
+              setIsCreatingClient(false);
               setActiveTab('clients');
             }}
             onOpenOnboardModal={() => {
               setSelectedCustomer(null);
+              setIsCreatingClient(true);
               setActiveTab('clients');
             }}
-            firmName={organization?.name || 'Tax Shield Advisor'}
+            onNavigateToLicenses={() => {
+              setSelectedCustomer(null);
+              setIsCreatingClient(false);
+              setActiveTab('licenses');
+            }}
+            isDistributor={isDistributor}
+            maxLicenses={activeMaxLicenses}
+            soldLicensesCount={soldLicensesCount}
+            firmName={activeFirmName}
           />
         )}
 
         {/* ================= TAB 2: CLIENTS & 360° WORKSPACE ================= */}
         {activeTab === 'clients' && (
-          selectedCustomer ? (
+          isCreatingClient ? (
+            <ClientOnboardingPage
+              customers={customers}
+              onBack={() => setIsCreatingClient(false)}
+              onCreateCustomer={handleCreateCustomer}
+              maxLicenses={activeMaxLicenses}
+              creatingClient={creatingClient}
+            />
+          ) : selectedCustomer ? (
             <ClientWorkspace
               client={selectedCustomer}
               onBackToDirectory={() => setSelectedCustomer(null)}
@@ -492,21 +803,24 @@ export default function AdminDashboard({ session }) {
               onDeleteInvoice={handleDeleteInvoice}
               onToggleClientAccess={handleToggleClientAccess}
               onDeleteClient={handleDeleteCustomer}
+              onUpdateClient={handleUpdateClient}
               togglingAccess={togglingAccess}
               deletingClient={deletingClient}
               savingStatus={savingStatus}
               savingInvoice={savingInvoice}
-              firmName={organization?.name || 'Tax Shield Advisor'}
+              firmName={activeFirmName}
             />
           ) : (
             <ClientDirectory
               customers={customers}
               documents={allDocuments}
               invoices={allInvoices}
-              onSelectCustomer={(c) => setSelectedCustomer(c)}
-              onCreateCustomer={handleCreateCustomer}
+              onSelectCustomer={(c) => {
+                setSelectedCustomer(c);
+                setIsCreatingClient(false);
+              }}
+              onOpenOnboardPage={() => setIsCreatingClient(true)}
               onDeleteCustomer={handleDeleteCustomer}
-              creatingClient={creatingClient}
               deletingClient={deletingClient}
               loading={loading}
             />
@@ -554,7 +868,8 @@ export default function AdminDashboard({ session }) {
                 onToggleInvoiceStatus={handleToggleInvoiceStatus}
                 onDeleteInvoice={handleDeleteInvoice}
                 onSwitchToCreate={() => setInvoiceSubTab('create')}
-                firmName={organization?.name || 'Tax Shield Advisor'}
+                organization={firmOrg || organization}
+                firmName={activeFirmName}
               />
             ) : (
               <InvoiceBuilder
@@ -563,20 +878,42 @@ export default function AdminDashboard({ session }) {
                 onSelectCustomer={setSelectedCustomer}
                 onCreateInvoice={handleCreateInvoice}
                 onBackToList={() => setInvoiceSubTab('list')}
+                organization={firmOrg || organization}
                 savingInvoice={savingInvoice}
               />
             )}
           </div>
         )}
 
-        {/* ================= TAB 4: GLOBAL DOCUMENTS (Master Audit Vault) ================= */}
-        {activeTab === 'documents' && (
+        {/* ================= TAB 4: GLOBAL DOCUMENTS (Master Audit Vault - Distributor Only) ================= */}
+        {activeTab === 'documents' && isDistributor && (
           <DocumentCenter
             customers={customers}
             documents={allDocuments}
             onUploadAdminDocument={handleAdminFileUpload}
             onDownloadFile={handleDownloadFile}
             onDeleteFile={handleDeleteFile}
+          />
+        )}
+
+        {/* ================= TAB 5: SELL & MANAGE LICENSES (Distributor Only) ================= */}
+        {activeTab === 'licenses' && isDistributor && (
+          <DistributorLicenseHub
+            session={session}
+            maxLicenses={activeMaxLicenses}
+            distributorOrg={firmOrg}
+            onLicenseIssued={refreshGlobalData}
+          />
+        )}
+
+        {/* ================= TAB 6: COMPANY SETTINGS & SECURITY (All Roles) ================= */}
+        {activeTab === 'settings' && (
+          <CompanySettings
+            key={firmOrg?.id || organization?.id || 'company-settings'}
+            organization={firmOrg || organization}
+            onUpdateOrganization={(updated) => {
+              setFirmOrg(updated);
+            }}
           />
         )}
       </main>
@@ -587,6 +924,7 @@ export default function AdminDashboard({ session }) {
           onClick={() => {
             setActiveTab('overview');
             setSelectedCustomer(null);
+            setIsCreatingClient(false);
           }}
           className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
             activeTab === 'overview' ? 'text-emerald-400 font-bold' : 'text-slate-400'
@@ -608,6 +946,7 @@ export default function AdminDashboard({ session }) {
           onClick={() => {
             setActiveTab('invoices');
             setSelectedCustomer(null);
+            setIsCreatingClient(false);
           }}
           className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
             activeTab === 'invoices' ? 'text-emerald-400 font-bold' : 'text-slate-400'
@@ -615,16 +954,45 @@ export default function AdminDashboard({ session }) {
         >
           <Receipt className="w-5 h-5" /> Invoices
         </button>
+        {isDistributor && (
+          <button
+            onClick={() => {
+              setActiveTab('documents');
+              setSelectedCustomer(null);
+              setIsCreatingClient(false);
+            }}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
+              activeTab === 'documents' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <FolderOpen className="w-5 h-5" /> Vault
+          </button>
+        )}
+        {isDistributor && (
+          <button
+            onClick={() => {
+              setActiveTab('licenses');
+              setSelectedCustomer(null);
+              setIsCreatingClient(false);
+            }}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
+              activeTab === 'licenses' ? 'text-amber-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <KeyRound className="w-5 h-5" /> Licenses
+          </button>
+        )}
         <button
           onClick={() => {
-            setActiveTab('documents');
+            setActiveTab('settings');
             setSelectedCustomer(null);
+            setIsCreatingClient(false);
           }}
           className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
-            activeTab === 'documents' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+            activeTab === 'settings' ? 'text-emerald-400 font-bold' : 'text-slate-400'
           }`}
         >
-          <FolderOpen className="w-5 h-5" /> Vault
+          <Settings className="w-5 h-5" /> Settings
         </button>
       </nav>
     </div>

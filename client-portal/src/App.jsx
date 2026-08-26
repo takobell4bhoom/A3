@@ -3,12 +3,20 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/ui/toast';
 import Login from './components/Login';
 import AdminLogin from './components/AdminLogin';
+import OwnerLogin from './components/OwnerLogin';
 import CustomerPortal from './components/CustomerPortal';
 import AdminDashboard from './components/AdminDashboard';
+import OwnerDashboard from './components/owner/OwnerDashboard';
 import { Loader2 } from 'lucide-react';
 
+/**
+ * Secret Platform Owner Path (Obfuscated and never publicly linked or auto-routed).
+ * Configurable via VITE_OWNER_SECRET_PATH environment variable.
+ */
+const OWNER_SECRET_PATH = import.meta.env.VITE_OWNER_SECRET_PATH || '/sys-ctrl-9x8q2';
+
 function AppRoutes() {
-  const { session, profile, isAdmin, loading } = useAuth();
+  const { session, profile, isAdmin, isOwner, loading } = useAuth();
 
   // Ensure routing waits until the user's role profile has finished loading from Supabase
   if (loading || (session && !profile)) {
@@ -23,13 +31,13 @@ function AppRoutes() {
   return (
     <Router>
       <Routes>
-        {/* Client Login Page */}
+        {/* Client Login Page (Never auto-routes to owner secret path) */}
         <Route 
           path="/" 
           element={
             !session ? (
               <Login />
-            ) : isAdmin ? (
+            ) : (isAdmin || isOwner) ? (
               <Navigate to="/admin" replace />
             ) : (
               <Navigate to="/portal" replace />
@@ -43,41 +51,25 @@ function AppRoutes() {
           element={<Navigate to="/" replace />} 
         />
 
-        {/* Dedicated Admin Login URL */}
+        {/* Dedicated Firm / Distributor Login URL (Never auto-routes to owner secret path) */}
         <Route 
           path="/admin/login" 
           element={
             !session ? (
               <AdminLogin />
-            ) : isAdmin ? (
-              <Navigate to="/admin" replace />
             ) : (
-              <Navigate to="/portal" replace />
+              <Navigate to="/admin" replace />
             )
           } 
         />
 
-        {/* Protected Customer Portal: Admins accessing /portal are automatically redirected to /admin */}
-        <Route 
-          path="/portal" 
-          element={
-            !session ? (
-              <Navigate to="/" replace />
-            ) : isAdmin ? (
-              <Navigate to="/admin" replace />
-            ) : (
-              <CustomerPortal session={session} />
-            )
-          } 
-        />
-        
-        {/* Protected Admin Dashboard: Clients accessing /admin are redirected to /portal */}
+        {/* Firm / Distributor Dashboard Route (Owner & Admins both have full access here) */}
         <Route 
           path="/admin" 
           element={
             !session ? (
               <Navigate to="/admin/login" replace />
-            ) : !isAdmin ? (
+            ) : (!isAdmin && !isOwner) ? (
               <Navigate to="/portal" replace />
             ) : (
               <AdminDashboard session={session} />
@@ -85,7 +77,37 @@ function AppRoutes() {
           } 
         />
 
-        {/* Fallback Catch-all */}
+        {/* Customer Portal Route */}
+        <Route 
+          path="/portal" 
+          element={
+            !session ? (
+              <Navigate to="/" replace />
+            ) : (
+              <CustomerPortal session={session} />
+            )
+          } 
+        />
+
+        {/* 
+          🔒 OBFUSCATED SECRET PLATFORM OWNER ROUTE
+          Only accessible by directly entering the secret URL in the browser address bar.
+          Never linked publicly and never auto-routed to by standard login forms.
+        */}
+        <Route 
+          path={OWNER_SECRET_PATH} 
+          element={
+            !session ? (
+              <OwnerLogin />
+            ) : !isOwner ? (
+              <Navigate to="/admin" replace />
+            ) : (
+              <OwnerDashboard session={session} />
+            )
+          } 
+        />
+
+        {/* Fallback Catch-all (Handles /owner, /owner/login, or unknown URLs by redirecting to home) */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

@@ -15,23 +15,27 @@ export default function InvoiceBuilder({
   onSelectCustomer,
   onCreateInvoice,
   onBackToList,
+  organization,
   savingInvoice = false,
 }) {
   const [targetCustomerId, setTargetCustomerId] = useState(selectedCustomer?.id || '');
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
 
-  const [billingEntity, setBillingEntity] = useState('GST Billing (18%)');
-  const [invoiceNo, setInvoiceNo] = useState(generateInvoiceNumber);
+  const [gstRate, setGstRate] = useState(18); // Editable GST Tax Rate (e.g. 0, 5, 12, 18, 28)
+  const [invoiceNo, setInvoiceNo] = useState(() => {
+    const prefix = organization?.invoice_prefix || 'INV';
+    return `${prefix}-${Date.now().toString().slice(-6)}`;
+  });
   const [issueDate, setIssueDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [paymentTerm, setPaymentTerm] = useState('NET 30');
   const [customDueDate, setCustomDueDate] = useState('');
-  const [remarks, setRemarks] = useState('');
+  const [remarks, setRemarks] = useState(() => organization?.invoice_notes || '');
   const [stripeUrl, setStripeUrl] = useState('');
   const [roundOff, setRoundOff] = useState(0);
 
   const [items, setItems] = useState(() => [
-    createInvoiceItem('Tax Return Preparation & Filing', 5000)
+    createInvoiceItem('Tax Advisory Services', 5000)
   ]);
 
   const toast = useToast();
@@ -53,12 +57,13 @@ export default function InvoiceBuilder({
   // Compute Due Date derived from Issue Date and Payment Term
   const dueDate = customDueDate || calculateDueDate(issueDate, paymentTerm);
 
-  // Determine GST Tax Rate
-  const isGst = billingEntity.includes('GST');
-  const taxRate = isGst ? 18 : 0;
+  // Dynamic Editable GST Rate
+  const numericGstRate = Math.max(0, parseFloat(gstRate) || 0);
+  const isGst = numericGstRate > 0;
+  const billingEntity = isGst ? `GST Billing (${numericGstRate}%)` : 'Non GST Billing';
 
-  // Safe Financial Totals in Paise/Rupees with GST
-  const totals = calculateInvoiceTotals(items, roundOff, taxRate);
+  // Safe Financial Totals in Paise/Rupees with dynamic GST
+  const totals = calculateInvoiceTotals(items, roundOff, numericGstRate);
 
   // Invoice Line Item Handlers
   const handleAddItem = () => {
@@ -216,17 +221,52 @@ export default function InvoiceBuilder({
                 </div>
               </div>
 
-              <div>
-                <Label className="text-xs font-semibold text-slate-700">Billing Category / Entity <span className="text-red-500">*</span></Label>
-                <select 
-                  value={billingEntity} 
-                  onChange={(e) => setBillingEntity(e.target.value)}
-                  className="w-full h-9 mt-1 rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
-                >
-                  <option value="GST Billing (18%)">GST Billing (18% - CGST 9% + SGST 9%)</option>
-                  <option value="Non GST Billing">Non GST Billing (0% Tax)</option>
-                  <option value="Corporate Retainer Billing">Corporate Retainer Billing (18% GST)</option>
-                </select>
+              {/* Editable GST Tax Rate Section */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-slate-800">
+                    GST Tax Rate (%) <span className="text-red-500">*</span>
+                  </Label>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-700">
+                    {numericGstRate > 0 ? `CGST ${(numericGstRate / 2)}% + SGST ${(numericGstRate / 2)}%` : 'Exempt / Non-GST'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative w-28">
+                    <Input 
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.1"
+                      value={gstRate}
+                      onChange={(e) => setGstRate(e.target.value)}
+                      className="h-8 text-xs font-mono font-bold bg-white text-slate-900 pr-7"
+                      placeholder="0.0"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                      %
+                    </span>
+                  </div>
+
+                  {/* Preset Quick Select Pills */}
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {[0, 5, 12, 18, 28].map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => setGstRate(rate)}
+                        className={`px-2 py-1 rounded text-[11px] font-mono font-bold transition-all ${
+                          numericGstRate === rate
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {rate === 0 ? '0% (Non-GST)' : `${rate}%`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -336,17 +376,26 @@ export default function InvoiceBuilder({
                 </div>
               )}
 
-              {isGst && (
+              {isGst ? (
                 <>
                   <div className="flex justify-between items-center text-slate-600">
-                    <span>CGST (9%)</span>
+                    <span>CGST ({(numericGstRate / 2)}%)</span>
                     <span className="font-mono">{formatCurrency(totals.cgst)}</span>
                   </div>
                   <div className="flex justify-between items-center text-slate-600">
-                    <span>SGST (9%)</span>
+                    <span>SGST ({(numericGstRate / 2)}%)</span>
                     <span className="font-mono">{formatCurrency(totals.sgst)}</span>
                   </div>
+                  <div className="flex justify-between items-center text-emerald-800 font-semibold border-t border-slate-200/60 pt-1">
+                    <span>Total GST ({numericGstRate}%)</span>
+                    <span className="font-mono">{formatCurrency(totals.tax)}</span>
+                  </div>
                 </>
+              ) : (
+                <div className="flex justify-between items-center text-slate-400 italic">
+                  <span>GST (0% Non-GST)</span>
+                  <span className="font-mono">₹0.00</span>
+                </div>
               )}
 
               <div className="flex justify-between items-center">

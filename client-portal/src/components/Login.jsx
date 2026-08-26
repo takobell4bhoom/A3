@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast';
-import { ShieldCheck, Building2, Loader2, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Loader2, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Login() {
@@ -44,14 +44,15 @@ export default function Login() {
     <div className="flex flex-col items-center justify-center min-h-screen px-4 py-12 bg-slate-50 font-sans">
       
       {/* Top Firm Branding */}
-      <div className="flex items-center gap-3 mb-8">
-        <div className="p-2.5 rounded-xl bg-slate-900 text-white shadow-lg">
-          <Building2 className="w-7 h-7 text-emerald-400" />
+      <div className="flex flex-col items-center gap-2 mb-8 text-center">
+        <div className="p-3 rounded-2xl bg-white shadow-md border border-slate-200/80">
+          <img 
+            src="/taxshield-logo.jpg" 
+            alt="Taxshield Advisor" 
+            className="h-12 w-auto object-contain"
+          />
         </div>
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">Tax Shield Advisor</h1>
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-widest">Client Financial Portal</p>
-        </div>
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mt-1">Client Financial Portal</p>
       </div>
 
       {/* Main Login Card */}

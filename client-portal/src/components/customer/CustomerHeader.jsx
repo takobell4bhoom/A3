@@ -1,69 +1,107 @@
 import { Button } from '@/components/ui/button';
-import { Building2, LogOut, LayoutDashboard, FolderOpen, Receipt } from 'lucide-react';
+import { LogOut, LayoutDashboard, FolderOpen, Receipt } from 'lucide-react';
 
 export default function CustomerHeader({
   firmName = 'Tax Shield Advisor',
+  logoUrl,
   userEmail,
   activeTab,
   setActiveTab,
   documentCount = 0,
   invoiceCount = 0,
+  features = { invoices: true, documents: true, workTracker: true },
   onSignOut,
 }) {
+  const showWorkTracker = features?.workTracker !== false;
+  const showDocuments = features?.documents !== false;
+  const showInvoices = features?.invoices !== false;
+
   return (
-    <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-slate-800 text-emerald-400 border border-slate-700">
-            <Building2 className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="font-bold text-base leading-none">{firmName}</h1>
-            <span className="text-xs text-slate-400">Client Portal</span>
-          </div>
+    <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 shadow-[0_1px_3px_0_rgba(0,0,0,0.02),0_1px_2px_-1px_rgba(0,0,0,0.02)]">
+      <div className="max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 h-18 sm:h-20 flex items-center justify-between gap-3 lg:gap-6">
+        
+        {/* Brand Logo (Prominent, Dynamic & Responsive) */}
+        <div className="flex items-center shrink-0 py-1">
+          {logoUrl ? (
+            <img 
+              src={logoUrl} 
+              alt={firmName} 
+              className="h-10 sm:h-11 md:h-12 lg:h-13 w-auto max-w-[150px] sm:max-w-[180px] md:max-w-[210px] lg:max-w-[240px] object-contain shrink-0 transition-all drop-shadow-2xs" 
+            />
+          ) : (
+            <img 
+              src="/taxshield-logo.jpg" 
+              alt="Taxshield Advisor" 
+              className="h-10 sm:h-11 md:h-12 lg:h-13 w-auto max-w-[150px] sm:max-w-[180px] md:max-w-[210px] lg:max-w-[240px] object-contain shrink-0 transition-all drop-shadow-2xs" 
+            />
+          )}
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400 hidden sm:inline">{userEmail}</span>
+        {/* Desktop Segmented Nav Tabs */}
+        <nav className="hidden md:flex items-center gap-0.5 lg:gap-1 bg-slate-100/90 p-1 lg:p-1.5 rounded-2xl border border-slate-200/70 shadow-inner shrink-0">
+          {showWorkTracker && (
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`text-[11px] lg:text-xs px-2.5 lg:px-3.5 py-1.5 lg:py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 lg:gap-2 whitespace-nowrap ${
+                activeTab === 'overview'
+                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 lg:w-4 lg:h-4" /> 
+              <span>Work Tracker</span>
+            </button>
+          )}
+
+          {showDocuments && (
+            <button
+              onClick={() => setActiveTab('documents')}
+              className={`text-[11px] lg:text-xs px-2.5 lg:px-3.5 py-1.5 lg:py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 lg:gap-2 whitespace-nowrap ${
+                activeTab === 'documents'
+                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <FolderOpen className="w-3.5 h-3.5 lg:w-4 lg:h-4" /> 
+              <span className="hidden lg:inline">My Documents</span>
+              <span className="lg:hidden">Docs</span>
+              <span className="text-[10px] opacity-75 font-mono">({documentCount})</span>
+            </button>
+          )}
+
+          {showInvoices && (
+            <button
+              onClick={() => setActiveTab('invoices')}
+              className={`text-[11px] lg:text-xs px-2.5 lg:px-3.5 py-1.5 lg:py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 lg:gap-2 whitespace-nowrap ${
+                activeTab === 'invoices'
+                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <Receipt className="w-3.5 h-3.5 lg:w-4 lg:h-4" /> 
+              <span>Invoices</span>
+              <span className="text-[10px] opacity-75 font-mono">({invoiceCount})</span>
+            </button>
+          )}
+        </nav>
+
+        {/* User Profile & Sign Out */}
+        <div className="flex items-center gap-2 sm:gap-3.5 shrink-0">
+          <div className="text-right hidden xl:block">
+            <p className="text-xs font-bold text-slate-800 truncate max-w-[150px]">{userEmail}</p>
+            <p className="text-[10px] text-slate-500 font-medium">Verified Client</p>
+          </div>
+
           <Button 
             variant="outline" 
             size="sm" 
             onClick={onSignOut} 
-            className="gap-1.5 text-xs bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700"
+            className="text-xs border-slate-200 bg-white text-slate-600 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 rounded-xl h-8 sm:h-9 px-2.5 sm:px-3 gap-1.5 transition-colors shadow-xs shrink-0"
           >
-            <LogOut className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Sign Out</span>
+            <LogOut className="w-3.5 h-3.5 shrink-0" /> <span className="hidden sm:inline">Sign Out</span>
           </Button>
         </div>
-      </div>
 
-      {/* Desktop Header Nav Tabs */}
-      <div className="hidden md:block bg-slate-950 border-t border-slate-800/80">
-        <div className="max-w-7xl mx-auto px-6 flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'overview' ? 'border-emerald-400 text-emerald-400 bg-white/5' : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <LayoutDashboard className="w-4 h-4" /> Work Tracker
-          </button>
-          <button
-            onClick={() => setActiveTab('documents')}
-            className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'documents' ? 'border-emerald-400 text-emerald-400 bg-white/5' : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <FolderOpen className="w-4 h-4" /> My Documents ({documentCount})
-          </button>
-          <button
-            onClick={() => setActiveTab('invoices')}
-            className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === 'invoices' ? 'border-emerald-400 text-emerald-400 bg-white/5' : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Receipt className="w-4 h-4" /> Invoices ({invoiceCount})
-          </button>
-        </div>
       </div>
     </header>
   );

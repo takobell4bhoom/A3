@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { ConfirmationModal } from '@/components/ui/dialog';
 import { 
-  Users, UserPlus, ShieldAlert, CheckCircle, Search, X, ArrowRight, Loader2, Trash2 
+  Users, UserPlus, ShieldAlert, CheckCircle, Search, X, ArrowRight, Trash2, 
+  ChevronLeft, ChevronRight 
 } from 'lucide-react';
 import { formatDate } from '@/lib/dateUtils';
 import { formatCurrency } from '@/lib/currency';
@@ -15,39 +15,16 @@ export default function ClientDirectory({
   documents = [],
   invoices = [],
   onSelectCustomer,
-  onCreateCustomer,
+  onOpenOnboardPage,
   onDeleteCustomer,
-  creatingClient = false,
   deletingClient = false,
   loading = false,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'disabled'
-  const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [deleteTargetClient, setDeleteTargetClient] = useState(null);
-
-  // New Client Form State
-  const [newEmail, setNewEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-
-  const handleOnboardSubmit = async (e) => {
-    e.preventDefault();
-    if (!newEmail || !newPassword) return;
-
-    const success = await onCreateCustomer({
-      email: newEmail,
-      password: newPassword,
-      fullName: fullName.trim() || undefined,
-    });
-
-    if (success) {
-      setNewEmail('');
-      setNewPassword('');
-      setFullName('');
-      setIsOnboardModalOpen(false);
-    }
-  };
 
   // Fast stats lookup per client
   const clientStatsMap = useMemo(() => {
@@ -83,6 +60,15 @@ export default function ClientDirectory({
     });
   }, [customers, searchQuery, statusFilter]);
 
+  // Paginated Slice for high-performance rendering (Prevents DOM overload at 1000s of clients)
+  const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / pageSize));
+  const effectivePage = Math.min(currentPage, totalPages);
+  
+  const paginatedCustomers = useMemo(() => {
+    const start = (effectivePage - 1) * pageSize;
+    return filteredCustomers.slice(start, start + pageSize);
+  }, [filteredCustomers, effectivePage, pageSize]);
+
   const activeCount = customers.filter(c => !c.is_disabled).length;
   const disabledCount = customers.filter(c => c.is_disabled).length;
 
@@ -103,7 +89,7 @@ export default function ClientDirectory({
         <Button
           variant="accent"
           size="sm"
-          onClick={() => setIsOnboardModalOpen(true)}
+          onClick={onOpenOnboardPage}
           className="h-9 px-4 font-semibold text-xs gap-1.5 self-start sm:self-auto shadow-sm"
         >
           <UserPlus className="w-4 h-4" /> Onboard New Client
@@ -190,7 +176,7 @@ export default function ClientDirectory({
                 <Button
                   variant="accent"
                   size="sm"
-                  onClick={() => setIsOnboardModalOpen(true)}
+                  onClick={onOpenOnboardPage}
                   className="mt-3 text-xs"
                 >
                   <UserPlus className="w-3.5 h-3.5 mr-1" /> Onboard First Client
@@ -210,7 +196,7 @@ export default function ClientDirectory({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredCustomers.map((customer) => {
+                {paginatedCustomers.map((customer) => {
                   const stats = clientStatsMap.get(customer.id) || { docCount: 0, unpaidAmount: 0 };
                   const initial = (customer.full_name || customer.email)[0].toUpperCase();
 
@@ -292,95 +278,66 @@ export default function ClientDirectory({
             </table>
           )}
         </div>
-      </Card>
 
-      {/* Onboard Client Modal Dialog */}
-      {isOnboardModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-sm font-bold">Onboard New Client Account</h3>
+        {/* Pagination Toolbar */}
+        {filteredCustomers.length > 0 && (
+          <div className="p-3.5 sm:p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <span>
+                Showing <strong className="text-slate-900 font-mono">{(effectivePage - 1) * pageSize + 1}</strong> to{' '}
+                <strong className="text-slate-900 font-mono">{Math.min(effectivePage * pageSize, filteredCustomers.length)}</strong> of{' '}
+                <strong className="text-slate-900 font-mono">{filteredCustomers.length}</strong> clients
+              </span>
+
+              <div className="flex items-center gap-1 pl-2 border-l border-slate-200">
+                <span className="text-[11px]">Rows:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="h-7 rounded border border-slate-200 bg-white px-1.5 text-xs text-slate-900 focus:outline-none"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
               </div>
-              <button
-                onClick={() => setIsOnboardModalOpen(false)}
-                disabled={creatingClient}
-                className="text-slate-400 hover:text-white p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
             </div>
 
-            <form onSubmit={handleOnboardSubmit} className="p-6 space-y-4">
-              <div>
-                <Label className="text-xs font-semibold text-slate-700">Client Full Name / Business Entity</Label>
-                <Input
-                  type="text"
-                  placeholder="e.g. Rahul Sharma / Acme Corp"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="h-9 text-xs mt-1"
-                />
-              </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <span className="text-[11px] font-mono font-medium">
+                Page {effectivePage} of {totalPages}
+              </span>
 
-              <div>
-                <Label className="text-xs font-semibold text-slate-700">Client Login Email <span className="text-red-500">*</span></Label>
-                <Input
-                  type="email"
-                  placeholder="client@company.com"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  required
-                  className="h-9 text-xs mt-1"
-                />
-              </div>
-
-              <div>
-                <Label className="text-xs font-semibold text-slate-700">Temporary Password <span className="text-red-500">*</span></Label>
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="h-9 text-xs mt-1"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">Minimum 6 characters</p>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex items-center gap-1">
                 <Button
-                  type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setIsOnboardModalOpen(false)}
-                  disabled={creatingClient}
-                  className="text-xs h-9"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={effectivePage <= 1}
+                  className="h-7 w-7 p-0"
+                  title="Previous Page"
                 >
-                  Cancel
+                  <ChevronLeft className="w-3.5 h-3.5" />
                 </Button>
                 <Button
-                  type="submit"
-                  variant="accent"
+                  variant="outline"
                   size="sm"
-                  disabled={creatingClient}
-                  className="text-xs h-9 px-5 font-semibold"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={effectivePage >= totalPages}
+                  className="h-7 w-7 p-0"
+                  title="Next Page"
                 >
-                  {creatingClient ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Registering...
-                    </>
-                  ) : (
-                    "Create Client Account"
-                  )}
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </Button>
               </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Card>
 
       {/* Delete Client Confirmation Modal */}
       <ConfirmationModal

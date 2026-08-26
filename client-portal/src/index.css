@@ -36,3 +36,81 @@ body {
 .text-brand-accent { color: rgb(var(--brand-accent)); }
 
 .border-brand { border-color: rgb(var(--brand-border)); }
+
+/* ==========================================================================
+   ENTERPRISE INVOICE PRINTING STYLESHEET
+   Strict 720px max-width boundary, exact internal padding, zero page overflow
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Completely hide the background app (#root, stat cards, tables, headers) */
+  #root {
+    display: none !important;
+  }
+
+  /* Hide any other non-invoice elements */
+  body > *:not(.print-invoice-modal):not(.print-invoice-portal) {
+    display: none !important;
+  }
+
+  /* Modal becomes a clean, centered, static block at the top of the printed page */
+  .print-invoice-modal {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+    box-sizing: border-box !important;
+    backdrop-filter: none !important;
+  }
+
+  .print-invoice-card {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 720px !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+  }
+
+  .print-invoice-sheet {
+    display: block !important;
+    width: 100% !important;
+    max-width: 720px !important;
+    margin: 0 auto !important;
+    padding: 8px 16px !important;
+    box-sizing: border-box !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+}

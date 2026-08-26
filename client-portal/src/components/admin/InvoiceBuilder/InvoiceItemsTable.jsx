@@ -13,25 +13,13 @@ export default function InvoiceItemsTable({
     <div className="pt-4 border-t border-slate-100">
       <div className="flex items-center justify-between mb-3">
         <h4 className="font-bold text-sm text-slate-900">Invoice Items</h4>
-        <div className="flex items-center gap-3 text-[11px] font-medium">
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Task
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Expense
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-cyan-500"></span> Retainer
-          </span>
-        </div>
       </div>
 
       <div className="border border-slate-200 rounded-lg overflow-x-auto">
-        <table className="w-full text-left text-xs min-w-[550px]">
+        <table className="w-full text-left text-xs min-w-[500px]">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-bold">
             <tr>
               <th className="p-2.5">Particulars</th>
-              <th className="p-2.5 w-28">Type</th>
               <th className="p-2.5 w-32">Amount (₹)</th>
               <th className="p-2.5 w-28">Discount (₹)</th>
               <th className="p-2.5 w-32 text-right">Total (₹)</th>
@@ -53,17 +41,6 @@ export default function InvoiceItemsTable({
                       className="h-8 text-xs" 
                       required 
                     />
-                  </td>
-                  <td className="p-2">
-                    <select 
-                      value={item.type} 
-                      onChange={(e) => onItemChange(item.id, 'type', e.target.value)} 
-                      className="w-full h-8 rounded border border-slate-200 text-xs px-2 bg-white focus:outline-none focus:ring-1 focus:ring-slate-900"
-                    >
-                      <option value="Task">Task</option>
-                      <option value="Expense">Expense</option>
-                      <option value="Retainer">Retainer</option>
-                    </select>
                   </td>
                   <td className="p-2">
                     <Input 

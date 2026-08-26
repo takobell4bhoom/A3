@@ -23,7 +23,6 @@ export function createInvoiceItem(particulars = 'Tax Advisory Services', amount 
   return {
     id,
     particulars,
-    type: 'Task',
     amount,
     discount: 0,
   };
@@ -131,4 +130,68 @@ export function calculateInvoiceTotals(items = [], roundOff = 0, taxRatePercent 
     total: fromCents(totalCents),
     taxRate,
   };
+}
+
+/**
+ * Converts a numerical rupee amount into formal Indian English words.
+ * Example: 4400 -> "Four Thousand Four Hundred Rupees Only"
+ * @param {number|string} num 
+ * @returns {string}
+ */
+export function numberToWords(num) {
+  if (num === null || num === undefined || isNaN(Number(num))) return '';
+  const n = Math.round(Number(num));
+  if (n === 0) return 'Zero Rupees Only';
+  if (n < 0) return 'Minus ' + numberToWords(Math.abs(n));
+
+  const ones = [
+    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+    'Seventeen', 'Eighteen', 'Nineteen'
+  ];
+  const tens = [
+    '', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'
+  ];
+
+  function convertTwoDigits(val) {
+    if (val < 20) return ones[val];
+    const t = Math.floor(val / 10);
+    const o = val % 10;
+    return tens[t] + (o ? ' ' + ones[o] : '');
+  }
+
+  function convertThreeDigits(val) {
+    const h = Math.floor(val / 100);
+    const rem = val % 100;
+    let str = '';
+    if (h > 0) str += ones[h] + ' Hundred';
+    if (rem > 0) {
+      if (str) str += ' ';
+      str += convertTwoDigits(rem);
+    }
+    return str;
+  }
+
+  let words = '';
+  const crore = Math.floor(n / 10000000);
+  let rem = n % 10000000;
+  const lakh = Math.floor(rem / 100000);
+  rem = rem % 100000;
+  const thousand = Math.floor(rem / 1000);
+  rem = rem % 1000;
+
+  if (crore > 0) {
+    words += convertTwoDigits(crore) + ' Crore ';
+  }
+  if (lakh > 0) {
+    words += convertTwoDigits(lakh) + ' Lakh ';
+  }
+  if (thousand > 0) {
+    words += convertTwoDigits(thousand) + ' Thousand ';
+  }
+  if (rem > 0) {
+    words += convertThreeDigits(rem) + ' ';
+  }
+
+  return (words.trim() + ' Rupees only.').replace(/\s+/g, ' ');
 }

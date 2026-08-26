@@ -12,13 +12,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Clock, FolderOpen, Receipt, ShieldAlert } from 'lucide-react';
 
 export default function CustomerPortal({ session }) {
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'documents' | 'invoices'
+  const { user, organization, isDisabled, features, signOut } = useAuth();
+
+  const showWorkTracker = features?.workTracker !== false;
+  const showDocuments = features?.documents !== false;
+  const showInvoices = features?.invoices !== false;
+
+  // Determine initial active tab based on permitted features
+  const defaultTab = showWorkTracker ? 'overview' 
+    : showDocuments ? 'documents' 
+    : 'invoices';
+
+  const [selectedTab, setSelectedTab] = useState(null);
+  
+  // Compute effective tab based on current feature permissions
+  let activeTab = selectedTab || defaultTab;
+  if (activeTab === 'overview' && !showWorkTracker) {
+    activeTab = showDocuments ? 'documents' : 'invoices';
+  } else if (activeTab === 'documents' && !showDocuments) {
+    activeTab = showWorkTracker ? 'overview' : 'invoices';
+  }
+
+  const setActiveTab = (tab) => setSelectedTab(tab);
+
   const [documents, setDocuments] = useState([]);
   const [statusTracker, setStatusTracker] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const { user, organization, isDisabled, signOut } = useAuth();
   const userId = session?.user?.id || user?.id;
   const toast = useToast();
 
@@ -84,7 +105,7 @@ export default function CustomerPortal({ session }) {
           .eq('user_id', userId)
           .maybeSingle();
 
-        if (isMounted) setStatusTracker(status);
+        if (isMounted && status) setStatusTracker(status);
 
         const { data: invs } = await supabase
           .from('invoices')
@@ -94,7 +115,7 @@ export default function CustomerPortal({ session }) {
 
         if (isMounted && invs) setInvoices(invs);
       } catch (err) {
-        console.error('Error in initial load:', err);
+        console.error('Error in initial fetch:', err);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -102,16 +123,21 @@ export default function CustomerPortal({ session }) {
 
     loadInitial();
 
-    // Real-time Postgres changes for Work Status Tracker
+    // Realtime subscription for work tracker status updates
     const statusSubscription = supabase
       .channel(`public:status_tracker:${userId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'status_tracker', filter: `user_id=eq.${userId}` },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'status_tracker',
+          filter: `user_id=eq.${userId}`,
+        },
         (payload) => {
-          if (isMounted && payload.new) {
+          if (payload.new) {
             setStatusTracker(payload.new);
-            toast.info('Status Updated', `Filing phase updated: ${payload.new.current_step}`);
+            toast.info('Status Updated', `Your filing status milestone has been updated.`);
           }
         }
       )
@@ -162,27 +188,30 @@ export default function CustomerPortal({ session }) {
   const customerUploadedDocuments = documents.filter(d => d.uploaded_by_role !== 'admin');
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 pb-20 md:pb-8 flex flex-col">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 pb-24 md:pb-12 flex flex-col font-sans selection:bg-sky-100 selection:text-sky-900">
       {/* Header Bar */}
       <CustomerHeader
         firmName={organization?.name || 'Tax Shield Advisor'}
+        logoUrl={organization?.logo_url}
         userEmail={session?.user?.email}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         documentCount={documents.length}
         invoiceCount={invoices.length}
+        features={features}
         onSignOut={signOut}
       />
 
-      {/* Main Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">
-        {/* ================= TAB 1: WORK TRACKER ================= */}
-        {activeTab === 'overview' && (
+      {/* Main Enterprise Canvas (Widescreen Fluid Layout) */}
+      <main className="max-w-[1600px] w-full mx-auto px-4 sm:px-8 lg:px-10 py-8 flex-1 space-y-8">
+        
+        {/* ================= TAB 1: WORK TRACKER (Only if enabled) ================= */}
+        {activeTab === 'overview' && showWorkTracker && (
           <WorkTrackerCard statusTracker={statusTracker} />
         )}
 
-        {/* ================= TAB 2: MY DOCUMENTS ================= */}
-        {activeTab === 'documents' && (
+        {/* ================= TAB 2: MY DOCUMENTS (Only if enabled) ================= */}
+        {activeTab === 'documents' && showDocuments && (
           <CustomerDocuments
             userId={userId}
             adminSentDocuments={adminSentDocuments}
@@ -194,37 +223,46 @@ export default function CustomerPortal({ session }) {
         )}
 
         {/* ================= TAB 3: INVOICES ================= */}
-        {activeTab === 'invoices' && (
+        {(activeTab === 'invoices' || (!showWorkTracker && !showDocuments)) && showInvoices && (
           <CustomerInvoices invoices={invoices} loading={loading} firmName={organization?.name || 'Tax Shield Advisor'} />
         )}
+
       </main>
 
-      {/* Mobile App Bottom Navigation Bar */}
+      {/* Mobile App Bottom Navigation Bar (Dynamically Gated) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 text-white border-t border-slate-800 z-40 flex items-center justify-around h-16 px-2">
-        <button
-          onClick={() => setActiveTab('overview')}
-          className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
-            activeTab === 'overview' ? 'text-emerald-400 font-bold' : 'text-slate-400'
-          }`}
-        >
-          <Clock className="w-5 h-5" /> Status
-        </button>
-        <button
-          onClick={() => setActiveTab('documents')}
-          className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
-            activeTab === 'documents' ? 'text-emerald-400 font-bold' : 'text-slate-400'
-          }`}
-        >
-          <FolderOpen className="w-5 h-5" /> Docs
-        </button>
-        <button
-          onClick={() => setActiveTab('invoices')}
-          className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
-            activeTab === 'invoices' ? 'text-emerald-400 font-bold' : 'text-slate-400'
-          }`}
-        >
-          <Receipt className="w-5 h-5" /> Invoices
-        </button>
+        {showWorkTracker && (
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
+              activeTab === 'overview' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <Clock className="w-5 h-5" /> Status
+          </button>
+        )}
+
+        {showDocuments && (
+          <button
+            onClick={() => setActiveTab('documents')}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
+              activeTab === 'documents' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <FolderOpen className="w-5 h-5" /> Docs
+          </button>
+        )}
+
+        {showInvoices && (
+          <button
+            onClick={() => setActiveTab('invoices')}
+            className={`flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 ${
+              activeTab === 'invoices' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+            }`}
+          >
+            <Receipt className="w-5 h-5" /> Invoices
+          </button>
+        )}
       </nav>
     </div>
   );

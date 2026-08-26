@@ -7,7 +7,7 @@ import { formatDate } from '@/lib/dateUtils';
 import DeliverDocumentModal from './DeliverDocumentModal';
 import { 
   FolderOpen, FileText, Download, Trash2, Plus, Search, X, 
-  Send, FileCheck, FileSpreadsheet, Image, FileCode
+  Send, FileCheck, FileSpreadsheet, Image, FileCode, ChevronLeft, ChevronRight 
 } from 'lucide-react';
 
 function getFileIcon(fileName = '') {
@@ -34,6 +34,8 @@ export default function DocumentCenter({
   const [searchQuery, setSearchQuery] = useState('');
   const [clientFilter, setClientFilter] = useState('all'); // 'all' | customerId
   const [sourceFilter, setSourceFilter] = useState('all'); // 'all' | 'customer' | 'admin'
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [isDeliverModalOpen, setIsDeliverModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // { id, filePath, fileName }
   const [deleting, setDeleting] = useState(false);
@@ -94,6 +96,15 @@ export default function DocumentCenter({
       return matchesSearch && matchesClient && matchesSource;
     });
   }, [documents, customerMap, searchQuery, clientFilter, sourceFilter]);
+
+  // Paginated Slice for high-performance rendering (Prevents DOM overload at 1000s of documents)
+  const totalPages = Math.max(1, Math.ceil(filteredDocuments.length / pageSize));
+  const effectivePage = Math.min(currentPage, totalPages);
+  
+  const paginatedDocuments = useMemo(() => {
+    const start = (effectivePage - 1) * pageSize;
+    return filteredDocuments.slice(start, start + pageSize);
+  }, [filteredDocuments, effectivePage, pageSize]);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -304,7 +315,7 @@ export default function DocumentCenter({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredDocuments.map((doc) => {
+                {paginatedDocuments.map((doc) => {
                   const client = customerMap.get(doc.user_id);
                   const isDeliveredByAdmin = doc.uploaded_by_role === 'admin';
                   const clientEmail = client?.email || 'Client';
@@ -393,6 +404,65 @@ export default function DocumentCenter({
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Pagination Toolbar */}
+        {filteredDocuments.length > 0 && (
+          <div className="p-3.5 sm:p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <span>
+                Showing <strong className="text-slate-900 font-mono">{(effectivePage - 1) * pageSize + 1}</strong> to{' '}
+                <strong className="text-slate-900 font-mono">{Math.min(effectivePage * pageSize, filteredDocuments.length)}</strong> of{' '}
+                <strong className="text-slate-900 font-mono">{filteredDocuments.length}</strong> files
+              </span>
+
+              <div className="flex items-center gap-1 pl-2 border-l border-slate-200">
+                <span className="text-[11px]">Rows:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="h-7 rounded border border-slate-200 bg-white px-1.5 text-xs text-slate-900 focus:outline-none"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <span className="text-[11px] font-mono font-medium">
+                Page {effectivePage} of {totalPages}
+              </span>
+
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={effectivePage <= 1}
+                  className="h-7 w-7 p-0"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={effectivePage >= totalPages}
+                  className="h-7 w-7 p-0"
+                  title="Next Page"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </Card>

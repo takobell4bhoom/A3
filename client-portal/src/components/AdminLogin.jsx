@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/toast';
-import { ShieldCheck, Building2, Loader2, Lock, ArrowRight, ShieldAlert } from 'lucide-react';
+import { ShieldCheck, Loader2, Lock, ArrowRight, ShieldAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function AdminLogin() {
@@ -41,17 +41,19 @@ export default function AdminLogin() {
           throw new Error('This administrator account has been disabled. Contact system support.');
         }
 
-        if (profile && profile.role !== 'admin' && profile.role !== 'staff') {
+        const allowedRoles = ['admin', 'staff', 'distributor', 'owner'];
+        if (profile && !allowedRoles.includes(profile.role)) {
           // Client attempted to log into the admin URL
           await supabase.auth.signOut();
-          throw new Error('Access Denied: This login portal is restricted to Firm Administrators. Please sign in via the Client Portal.');
+          throw new Error('Access Denied: This login portal is restricted to Firm Administrators and Partners. Please sign in via the Client Portal.');
         }
 
-        toast.success('Admin Authenticated', 'Welcome to Tax Shield Advisor Management Console.');
+        toast.success('Authenticated', 'Welcome to Tax Shield Advisor Management Console.');
       }
     } catch (err) {
-      setError(err.message || 'Authentication failed.');
-      toast.error('Admin Sign In Failed', err.message);
+      const errorMsg = err?.message || err?.error_description || (typeof err === 'string' ? err : 'Invalid login credentials.');
+      setError(errorMsg);
+      toast.error('Admin Sign In Failed', errorMsg);
     } finally {
       setLoading(false);
     }
@@ -61,18 +63,18 @@ export default function AdminLogin() {
     <div className="flex flex-col items-center justify-center min-h-screen px-4 py-12 bg-slate-950 text-slate-100 font-sans">
       
       {/* Top Firm Branding */}
-      <div className="flex items-center gap-3 mb-8">
-        <div className="p-3 rounded-2xl bg-slate-900 text-emerald-400 border border-slate-800 shadow-2xl">
-          <Building2 className="w-8 h-8" />
+      <div className="flex flex-col items-center gap-2 mb-8 text-center">
+        <div className="p-3 rounded-2xl bg-white shadow-xl border border-slate-700">
+          <img 
+            src="/taxshield-logo.jpg" 
+            alt="Taxshield Advisor" 
+            className="h-12 w-auto object-contain"
+          />
         </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-white">Tax Shield Advisor</h1>
-            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-              Admin
-            </span>
-          </div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mt-0.5">Firm Management Console</p>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800">
+            Enterprise Admin Console
+          </span>
         </div>
       </div>
 

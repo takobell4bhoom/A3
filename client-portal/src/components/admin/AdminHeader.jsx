@@ -8,13 +8,15 @@ export default function AdminHeader({
   activeTab,
   setActiveTab,
   documentCount = 0,
+  clientCount = 0,
   maxLicenses = 25,
   soldLicensesCount = 0,
   isOwner = false,
   isDistributor = false,
   onSignOut,
 }) {
-  const usagePercent = Math.min(100, Math.round((soldLicensesCount / maxLicenses) * 100));
+  const displayCount = isDistributor ? soldLicensesCount : clientCount;
+  const usagePercent = maxLicenses > 0 ? Math.min(100, Math.round((displayCount / maxLicenses) * 100)) : 0;
 
   return (
     <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 shadow-[0_1px_3px_0_rgba(0,0,0,0.02),0_1px_2px_-1px_rgba(0,0,0,0.02)]">
@@ -126,19 +128,20 @@ export default function AdminHeader({
           {/* Right Controls: Quota & User Controls */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             
-            {/* Live License Quota Counter (Distributor Only) */}
-            {isDistributor && (
-              <div 
-                onClick={() => setActiveTab('licenses')}
-                className="hidden lg:flex items-center gap-2 bg-sky-50/80 hover:bg-sky-100/80 border border-sky-200 text-sky-900 rounded-xl px-2.5 lg:px-3.5 py-1.5 text-xs font-semibold cursor-pointer transition-all shadow-xs shrink-0"
-                title="Click to view license pool"
-              >
-                <span className="text-slate-500 font-medium hidden xl:inline">Licenses:</span>
-                <span className={`font-mono font-bold ${usagePercent >= 90 ? 'text-rose-600' : 'text-sky-700'}`}>
-                  {soldLicensesCount} / {maxLicenses}
-                </span>
-              </div>
-            )}
+            {/* Live License Quota Counter (Reactive for both Distributors & Company Admins) */}
+            <div 
+              onClick={() => setActiveTab(isDistributor ? 'licenses' : 'clients')}
+              className="hidden lg:flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 rounded-xl px-2.5 lg:px-3.5 py-1.5 text-xs font-semibold cursor-pointer transition-all shadow-2xs shrink-0"
+              title={isDistributor ? "Click to view license pool" : "Click to view client seats"}
+            >
+              <KeyRound className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span className="text-slate-500 font-medium hidden xl:inline">
+                {isDistributor ? 'Licenses Sold:' : 'License Pool:'}
+              </span>
+              <span className={`font-mono font-bold ${usagePercent >= 90 ? 'text-rose-600' : 'text-slate-900'}`}>
+                {displayCount} / {maxLicenses}
+              </span>
+            </div>
 
             <div className="text-right hidden 2xl:block border-l border-slate-200 pl-3">
               <p className="text-xs font-bold text-slate-800 truncate max-w-[150px]">{userEmail}</p>

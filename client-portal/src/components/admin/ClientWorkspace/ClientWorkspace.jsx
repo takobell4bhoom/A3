@@ -30,6 +30,7 @@ export default function ClientWorkspace({
   deletingClient = false,
   savingStatus = false,
   savingInvoice = false,
+  organization,
   firmName = 'Tax Shield Advisor',
 }) {
   const [workspaceTab, setWorkspaceTab] = useState('documents'); // 'documents' | 'status' | 'invoices' | 'profile'
@@ -224,6 +225,7 @@ export default function ClientWorkspace({
         <ClientInvoicesTab
           client={client}
           invoices={invoices}
+          organization={organization}
           onCreateInvoice={onCreateInvoice}
           onToggleInvoiceStatus={onToggleInvoiceStatus}
           onDeleteInvoice={onDeleteInvoice}

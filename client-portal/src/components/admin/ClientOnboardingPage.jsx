@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   ArrowLeft, Search, Pencil, Image as ImageIcon, 
-  Loader2, Check, UserPlus, ShieldAlert 
+  Loader2, Check, UserPlus, ShieldAlert, Eye, EyeOff 
 } from 'lucide-react';
 
 const CLIENT_TYPES = [
@@ -66,6 +66,7 @@ export default function ClientOnboardingPage({
   // Portal Credentials
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   // Contact Details State
   const [mobileNo, setMobileNo] = useState('');
@@ -474,15 +475,25 @@ export default function ClientOnboardingPage({
                     <Label className="text-xs font-semibold text-slate-700">
                       Temporary Password <span className="text-red-500">*</span>
                     </Label>
-                    <Input
-                      type="password"
-                      placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      required
-                      minLength={6}
-                      className="h-10 text-xs bg-white border-slate-200"
-                    />
+                    <div className="relative">
+                      <Input
+                        type={showLoginPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        className="h-10 text-xs bg-white border-slate-200 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                        title={showLoginPassword ? "Hide password" : "Show password"}
+                      >
+                        {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                     <p className="text-[10px] text-slate-400">Min 6 characters</p>
                   </div>
                 </div>

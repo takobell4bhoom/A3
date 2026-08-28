@@ -224,7 +224,12 @@ export default function CustomerPortal({ session }) {
 
         {/* ================= TAB 3: INVOICES ================= */}
         {(activeTab === 'invoices' || (!showWorkTracker && !showDocuments)) && showInvoices && (
-          <CustomerInvoices invoices={invoices} loading={loading} firmName={organization?.name || 'Tax Shield Advisor'} />
+          <CustomerInvoices 
+            invoices={invoices} 
+            loading={loading} 
+            organization={organization}
+            firmName={organization?.name || 'Tax Shield Advisor'} 
+          />
         )}
 
       </main>

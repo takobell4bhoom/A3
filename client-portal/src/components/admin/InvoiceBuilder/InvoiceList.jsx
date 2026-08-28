@@ -292,8 +292,14 @@ export default function InvoiceList({
                         <p className="text-[10px] text-slate-400">Due: {inv.due_date ? formatDate(inv.due_date) : 'On Receipt'}</p>
                       </td>
                       <td className="p-3.5">
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                          {inv.billing_entity || 'Standard'}
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                          inv.gst_type === 'inter' || inv.billing_entity?.includes('IGST')
+                            ? 'bg-blue-50 text-blue-800 border-blue-200'
+                            : inv.gst_type === 'exempt' || inv.billing_entity?.includes('Non GST') || inv.billing_entity?.includes('0%')
+                              ? 'bg-slate-100 text-slate-600 border-slate-200'
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        }`}>
+                          {inv.billing_entity || (inv.gst_type === 'inter' ? 'IGST Billing' : 'GST Billing')}
                         </span>
                       </td>
                       <td className="p-3.5 text-right font-mono font-bold text-slate-900 text-sm">

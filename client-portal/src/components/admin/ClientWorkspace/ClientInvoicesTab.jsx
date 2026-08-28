@@ -14,6 +14,7 @@ import {
 export default function ClientInvoicesTab({
   client,
   invoices = [],
+  organization,
   onCreateInvoice,
   onToggleInvoiceStatus,
   onDeleteInvoice,
@@ -91,6 +92,7 @@ export default function ClientInvoicesTab({
 
         <InvoiceBuilder
           customers={[client]}
+          existingInvoices={invoices}
           selectedCustomer={client}
           onSelectCustomer={() => {}}
           onCreateInvoice={async (payload) => {
@@ -101,6 +103,7 @@ export default function ClientInvoicesTab({
             return success;
           }}
           onBackToList={() => setIsCreating(false)}
+          organization={organization}
           savingInvoice={savingInvoice}
         />
       </div>
@@ -296,6 +299,7 @@ export default function ClientInvoicesTab({
           onClose={() => setPreviewInvoice(null)}
           invoice={previewInvoice}
           client={client}
+          organization={organization}
           firmName={firmName}
         />
       )}

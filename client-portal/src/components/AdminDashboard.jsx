@@ -190,11 +190,14 @@ export default function AdminDashboard({ session }) {
         if (isDistributor && session?.user?.id) {
           const { data: buyerOrgs } = await supabase
             .from('organizations')
-            .select('id')
+            .select('*')
             .eq('distributor_user_id', session.user.id);
 
-          if (buyerOrgs && buyerOrgs.length > 0) {
-            orgScopeIds = [orgId, ...buyerOrgs.map(b => b.id)];
+          if (isMounted && buyerOrgs) {
+            setSoldCompanies(buyerOrgs);
+            if (buyerOrgs.length > 0) {
+              orgScopeIds = [orgId, ...buyerOrgs.map(b => b.id)];
+            }
           }
         }
 
@@ -269,15 +272,18 @@ export default function AdminDashboard({ session }) {
 
     if (!orgId) return;
 
-    // Listen to realtime updates strictly on current organization
+    // Listen to realtime updates on current organization and buyer organizations
     const orgSubscription = supabase
-      .channel(`public:organizations:${orgId}`)
+      .channel(`public:organizations:${orgId}:${session?.user?.id || 'admin'}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'organizations', filter: `id=eq.${orgId}` },
+        { event: '*', schema: 'public', table: 'organizations' },
         (payload) => {
-          if (payload.new) {
+          if (payload.new?.id === orgId) {
             setFirmOrg(payload.new);
+          }
+          if (isDistributor) {
+            refreshGlobalData();
           }
         }
       )
@@ -287,7 +293,7 @@ export default function AdminDashboard({ session }) {
       isMounted = false;
       supabase.removeChannel(orgSubscription);
     };
-  }, [orgId, isDistributor, session?.user?.id]);
+  }, [orgId, isDistributor, session?.user?.id, refreshGlobalData]);
 
   // Comprehensive Client Onboarding Handler
   const handleCreateCustomer = async (clientPayload) => {
@@ -720,7 +726,7 @@ export default function AdminDashboard({ session }) {
 
   const activeMaxLicenses = Number(firmOrg?.max_licenses ?? organization?.max_licenses ?? 25);
   const activeFirmName = firmOrg?.name || organization?.name || 'Tax Shield Advisor';
-  const soldLicensesCount = soldCompanies.length;
+  const soldLicensesCount = isDistributor ? soldCompanies.length : customers.length;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 pb-24 md:pb-12 flex flex-col font-sans selection:bg-sky-100 selection:text-sky-900">
@@ -808,6 +814,7 @@ export default function AdminDashboard({ session }) {
               deletingClient={deletingClient}
               savingStatus={savingStatus}
               savingInvoice={savingInvoice}
+              organization={firmOrg || organization}
               firmName={activeFirmName}
             />
           ) : (
@@ -874,6 +881,7 @@ export default function AdminDashboard({ session }) {
             ) : (
               <InvoiceBuilder
                 customers={customers}
+                existingInvoices={allInvoices}
                 selectedCustomer={selectedCustomer}
                 onSelectCustomer={setSelectedCustomer}
                 onCreateInvoice={handleCreateInvoice}

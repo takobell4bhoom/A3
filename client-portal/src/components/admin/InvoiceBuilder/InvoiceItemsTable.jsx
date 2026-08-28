@@ -19,10 +19,11 @@ export default function InvoiceItemsTable({
         <table className="w-full text-left text-xs min-w-[500px]">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] font-bold">
             <tr>
-              <th className="p-2.5">Particulars</th>
-              <th className="p-2.5 w-32">Amount (₹)</th>
-              <th className="p-2.5 w-28">Discount (₹)</th>
-              <th className="p-2.5 w-32 text-right">Total (₹)</th>
+              <th className="p-2.5">Particulars / Description</th>
+              <th className="p-2.5 w-24">SAC / HSN</th>
+              <th className="p-2.5 w-28">Amount (₹)</th>
+              <th className="p-2.5 w-24">Discount (₹)</th>
+              <th className="p-2.5 w-28 text-right">Total (₹)</th>
               <th className="p-2.5 w-10"></th>
             </tr>
           </thead>
@@ -35,11 +36,20 @@ export default function InvoiceItemsTable({
                 <tr key={item.id}>
                   <td className="p-2">
                     <Input 
-                      placeholder="Particulars / Service Description" 
+                      placeholder="Service / Product Description" 
                       value={item.particulars} 
                       onChange={(e) => onItemChange(item.id, 'particulars', e.target.value)} 
                       className="h-8 text-xs" 
                       required 
+                    />
+                  </td>
+                  <td className="p-2">
+                    <Input 
+                      placeholder="9983" 
+                      value={item.sac_code || ''} 
+                      onChange={(e) => onItemChange(item.id, 'sac_code', e.target.value)} 
+                      className="h-8 text-xs font-mono" 
+                      title="Services Accounting Code (SAC) or HSN Code"
                     />
                   </td>
                   <td className="p-2">

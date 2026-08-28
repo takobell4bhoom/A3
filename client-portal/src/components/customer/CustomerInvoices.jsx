@@ -6,7 +6,12 @@ import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/dateUtils';
 import InvoicePreviewModal from '../admin/InvoiceBuilder/InvoicePreviewModal';
 
-export default function CustomerInvoices({ invoices = [], loading = false, firmName = 'Tax Shield Advisor' }) {
+export default function CustomerInvoices({ 
+  invoices = [], 
+  loading = false, 
+  organization,
+  firmName = 'Tax Shield Advisor' 
+}) {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
 
   return (
@@ -127,6 +132,7 @@ export default function CustomerInvoices({ invoices = [], loading = false, firmN
           onClose={() => setSelectedInvoice(null)}
           invoice={selectedInvoice}
           client={null}
+          organization={organization}
           firmName={firmName}
         />
       )}

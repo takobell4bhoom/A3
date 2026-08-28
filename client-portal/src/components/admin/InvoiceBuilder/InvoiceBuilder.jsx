@@ -3,14 +3,36 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Receipt, Loader2, Search, ArrowLeft, Check } from 'lucide-react';
+import { Receipt, Loader2, Search, ArrowLeft, Check, Sparkles } from 'lucide-react';
 import InvoiceItemsTable from './InvoiceItemsTable';
-import { calculateInvoiceTotals, formatCurrency, generateInvoiceNumber, createInvoiceItem } from '@/lib/currency';
+import { 
+  calculateInvoiceTotals, 
+  formatCurrency, 
+  getNextInvoiceNumber, 
+  createInvoiceItem,
+  INDIAN_STATES 
+} from '@/lib/currency';
 import { calculateDueDate } from '@/lib/dateUtils';
 import { useToast } from '@/components/ui/toast';
 
+function detectGstAndPos(client, organization) {
+  if (!client) return null;
+  const clientAddress = (client.address || '').toLowerCase();
+  const orgState = (organization?.state || '').toLowerCase();
+
+  for (const st of INDIAN_STATES) {
+    if (clientAddress.includes(st.name.toLowerCase()) || clientAddress.includes(st.code)) {
+      const pos = `${st.code} - ${st.name}`;
+      const type = (orgState && !orgState.includes(st.name.toLowerCase())) ? 'inter' : 'intra';
+      return { pos, type };
+    }
+  }
+  return null;
+}
+
 export default function InvoiceBuilder({
   customers = [],
+  existingInvoices = [],
   selectedCustomer,
   onSelectCustomer,
   onCreateInvoice,
@@ -22,11 +44,24 @@ export default function InvoiceBuilder({
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
 
-  const [gstRate, setGstRate] = useState(18); // Editable GST Tax Rate (e.g. 0, 5, 12, 18, 28)
-  const [invoiceNo, setInvoiceNo] = useState(() => {
-    const prefix = organization?.invoice_prefix || 'INV';
-    return `${prefix}-${Date.now().toString().slice(-6)}`;
+  // Enterprise GST Tax Mode: 'intra' (CGST+SGST) | 'inter' (IGST) | 'exempt' (0%)
+  const [gstType, setGstType] = useState(() => {
+    const detected = detectGstAndPos(selectedCustomer, organization);
+    return detected?.type || 'intra';
   });
+  const [gstRate, setGstRate] = useState(18); // Editable GST Tax Rate (e.g. 0, 5, 12, 18, 28)
+  const [placeOfSupply, setPlaceOfSupply] = useState(() => {
+    const detected = detectGstAndPos(selectedCustomer, organization);
+    if (detected?.pos) return detected.pos;
+    return organization?.state ? `${organization.state}` : '27 - Maharashtra';
+  });
+  const [isRcm, setIsRcm] = useState(false); // Reverse Charge Mechanism
+
+  // Auto-Increment Sequential Invoice Number
+  const [invoiceNo, setInvoiceNo] = useState(() => {
+    return getNextInvoiceNumber(existingInvoices, organization?.invoice_prefix || 'INV');
+  });
+
   const [issueDate, setIssueDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [paymentTerm, setPaymentTerm] = useState('NET 30');
   const [customDueDate, setCustomDueDate] = useState('');
@@ -35,7 +70,7 @@ export default function InvoiceBuilder({
   const [roundOff, setRoundOff] = useState(0);
 
   const [items, setItems] = useState(() => [
-    createInvoiceItem('Tax Advisory Services', 5000)
+    createInvoiceItem('Tax Advisory & Compliance Services', 5000, '9983')
   ]);
 
   const toast = useToast();
@@ -44,6 +79,19 @@ export default function InvoiceBuilder({
   const activeClient = useMemo(() => {
     return customers.find(c => c.id === targetCustomerId) || selectedCustomer || null;
   }, [customers, targetCustomerId, selectedCustomer]);
+
+  const handleSelectClient = (client) => {
+    setTargetCustomerId(client.id);
+    if (onSelectCustomer) onSelectCustomer(client);
+    setIsClientDropdownOpen(false);
+    setClientSearchQuery('');
+
+    const detected = detectGstAndPos(client, organization);
+    if (detected) {
+      if (detected.pos) setPlaceOfSupply(detected.pos);
+      if (detected.type) setGstType(detected.type);
+    }
+  };
 
   // Filtered clients for the dropdown search
   const filteredClients = useMemo(() => {
@@ -58,18 +106,20 @@ export default function InvoiceBuilder({
   const dueDate = customDueDate || calculateDueDate(issueDate, paymentTerm);
 
   // Dynamic Editable GST Rate
-  const numericGstRate = Math.max(0, parseFloat(gstRate) || 0);
-  const isGst = numericGstRate > 0;
-  const billingEntity = isGst ? `GST Billing (${numericGstRate}%)` : 'Non GST Billing';
+  const numericGstRate = gstType === 'exempt' ? 0 : Math.max(0, parseFloat(gstRate) || 0);
+  const isGst = numericGstRate > 0 && gstType !== 'exempt';
+  const billingEntity = isGst 
+    ? (gstType === 'inter' ? `IGST Billing (${numericGstRate}%)` : `GST Billing (${numericGstRate}%)`)
+    : 'Non GST / Exempt Billing';
 
-  // Safe Financial Totals in Paise/Rupees with dynamic GST
-  const totals = calculateInvoiceTotals(items, roundOff, numericGstRate);
+  // Safe Financial Totals in Paise/Rupees with full Indian GST compliance (CGST+SGST vs IGST)
+  const totals = calculateInvoiceTotals(items, roundOff, numericGstRate, gstType);
 
   // Invoice Line Item Handlers
   const handleAddItem = () => {
     setItems(prev => [
       ...prev,
-      createInvoiceItem('', 0)
+      createInvoiceItem('', 0, '9983')
     ]);
   };
 
@@ -105,16 +155,27 @@ export default function InvoiceBuilder({
       stripe_url: stripeUrl.trim() || undefined,
       items: items,
       status: 'unpaid',
+      // Enterprise GST Metadata
+      gst_type: gstType,
+      gst_rate: numericGstRate,
+      tax_amount: totals.tax,
+      cgst_amount: totals.cgst,
+      sgst_amount: totals.sgst,
+      igst_amount: totals.igst,
+      place_of_supply: placeOfSupply,
+      is_rcm: isRcm,
     };
 
     const success = await onCreateInvoice(invoicePayload);
     if (success) {
-      setInvoiceNo(generateInvoiceNumber());
+      // Auto-increment sequence for next invoice
+      const updatedInvoicesList = [...existingInvoices, { invoice_no: invoiceNo }];
+      setInvoiceNo(getNextInvoiceNumber(updatedInvoicesList, organization?.invoice_prefix || 'INV'));
       setRemarks('');
       setStripeUrl('');
       setCustomDueDate('');
       setRoundOff(0);
-      setItems([createInvoiceItem('Tax Advisory Services', 0)]);
+      setItems([createInvoiceItem('Tax Advisory & Compliance Services', 0, '9983')]);
       if (onBackToList) onBackToList();
     }
   };
@@ -136,7 +197,7 @@ export default function InvoiceBuilder({
               </Button>
             )}
             <CardTitle className="text-lg flex items-center gap-2 text-slate-900">
-              <Receipt className="w-5 h-5 text-emerald-600" /> Issue New Tax Invoice
+              <Receipt className="w-5 h-5 text-emerald-600" /> Issue Enterprise GST Tax Invoice
             </CardTitle>
           </div>
 
@@ -150,7 +211,7 @@ export default function InvoiceBuilder({
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
-            {/* Left Column: Client Search & Billing Entity */}
+            {/* Left Column: Client Search & GST Configuration */}
             <div className="space-y-4">
               {/* Searchable Client Selector */}
               <div className="relative">
@@ -196,12 +257,7 @@ export default function InvoiceBuilder({
                               <button
                                 key={client.id}
                                 type="button"
-                                onClick={() => {
-                                  setTargetCustomerId(client.id);
-                                  if (onSelectCustomer) onSelectCustomer(client);
-                                  setIsClientDropdownOpen(false);
-                                  setClientSearchQuery('');
-                                }}
+                                onClick={() => handleSelectClient(client)}
                                 className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between transition-colors ${
                                   isSelected ? 'bg-emerald-50 text-emerald-900 font-bold' : 'hover:bg-slate-50 text-slate-800'
                                 }`}
@@ -221,56 +277,160 @@ export default function InvoiceBuilder({
                 </div>
               </div>
 
-              {/* Editable GST Tax Rate Section */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+              {/* Enterprise GST Tax Mode Selector */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs font-semibold text-slate-800">
-                    GST Tax Rate (%) <span className="text-red-500">*</span>
+                    Tax Structure &amp; GST Type <span className="text-red-500">*</span>
                   </Label>
                   <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-700">
-                    {numericGstRate > 0 ? `CGST ${(numericGstRate / 2)}% + SGST ${(numericGstRate / 2)}%` : 'Exempt / Non-GST'}
+                    {gstType === 'exempt'
+                      ? '0% (Non-GST / Exempt)'
+                      : gstType === 'inter'
+                        ? `IGST (${numericGstRate}%)`
+                        : `CGST ${(numericGstRate / 2)}% + SGST ${(numericGstRate / 2)}%`}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="relative w-28">
-                    <Input 
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.1"
-                      value={gstRate}
-                      onChange={(e) => setGstRate(e.target.value)}
-                      className="h-8 text-xs font-mono font-bold bg-white text-slate-900 pr-7"
-                      placeholder="0.0"
-                    />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                      %
-                    </span>
+                {/* Segmented GST Mode Pills */}
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-200/70 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGstType('intra');
+                      if (numericGstRate === 0) setGstRate(18);
+                    }}
+                    className={`py-1.5 px-2 text-[11px] font-bold rounded-md transition-all text-center ${
+                      gstType === 'intra'
+                        ? 'bg-white text-emerald-800 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Intra-State (CGST+SGST)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGstType('inter');
+                      if (numericGstRate === 0) setGstRate(18);
+                    }}
+                    className={`py-1.5 px-2 text-[11px] font-bold rounded-md transition-all text-center ${
+                      gstType === 'inter'
+                        ? 'bg-white text-blue-800 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Inter-State (IGST)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGstType('exempt');
+                      setGstRate(0);
+                    }}
+                    className={`py-1.5 px-2 text-[11px] font-bold rounded-md transition-all text-center ${
+                      gstType === 'exempt'
+                        ? 'bg-white text-slate-800 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Non-GST / Exempt
+                  </button>
+                </div>
+
+                {/* GST Rate Percentage & Quick Select (Visible when not exempt) */}
+                {gstType !== 'exempt' && (
+                  <div className="space-y-2 pt-1 border-t border-slate-200/60">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[11px] font-semibold text-slate-700">GST Rate (%)</Label>
+                      <span className="text-[10px] text-slate-500 font-medium">Standard Indian Slabs</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-24">
+                        <Input 
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.1"
+                          value={gstRate}
+                          onChange={(e) => setGstRate(e.target.value)}
+                          className="h-8 text-xs font-mono font-bold bg-white text-slate-900 pr-7"
+                          placeholder="18"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                          %
+                        </span>
+                      </div>
+
+                      {/* Preset Quick Select Pills */}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {[5, 12, 18, 28].map((rate) => (
+                          <button
+                            key={rate}
+                            type="button"
+                            onClick={() => setGstRate(rate)}
+                            className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold transition-all ${
+                              numericGstRate === rate
+                                ? 'bg-emerald-600 text-white shadow-sm'
+                                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {rate}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Place of Supply (POS) & RCM Declaration */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 border-t border-slate-200/60">
+                  <div>
+                    <Label className="text-[11px] font-semibold text-slate-700">
+                      Place of Supply (POS)
+                    </Label>
+                    <select
+                      value={placeOfSupply}
+                      onChange={(e) => {
+                        const selectedState = e.target.value;
+                        setPlaceOfSupply(selectedState);
+                        const orgState = (organization?.state || '').toLowerCase();
+                        if (orgState && !orgState.includes(selectedState.split('-')[1]?.trim().toLowerCase())) {
+                          setGstType('inter');
+                        }
+                      }}
+                      className="w-full h-8 mt-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      {INDIAN_STATES.map((st) => (
+                        <option key={st.code} value={`${st.code} - ${st.name}`}>
+                          {st.code} - {st.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  {/* Preset Quick Select Pills */}
-                  <div className="flex items-center gap-1 flex-wrap">
-                    {[0, 5, 12, 18, 28].map((rate) => (
-                      <button
-                        key={rate}
-                        type="button"
-                        onClick={() => setGstRate(rate)}
-                        className={`px-2 py-1 rounded text-[11px] font-mono font-bold transition-all ${
-                          numericGstRate === rate
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        {rate === 0 ? '0% (Non-GST)' : `${rate}%`}
-                      </button>
-                    ))}
+                  <div>
+                    <Label className="text-[11px] font-semibold text-slate-700">
+                      Reverse Charge (RCM)
+                    </Label>
+                    <select
+                      value={isRcm ? 'yes' : 'no'}
+                      onChange={(e) => setIsRcm(e.target.value === 'yes')}
+                      className="w-full h-8 mt-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="no">No (Standard Tax Supply)</option>
+                      <option value="yes">Yes (Tax Payable by Recipient)</option>
+                    </select>
                   </div>
                 </div>
+
               </div>
             </div>
 
-            {/* Right Column: Dates & Terms */}
+            {/* Right Column: Dates & Auto-Increment Sequence */}
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -284,12 +444,18 @@ export default function InvoiceBuilder({
                   />
                 </div>
                 <div>
-                  <Label className="text-xs font-semibold text-slate-700">Invoice No. <span className="text-red-500">*</span></Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-slate-700">Invoice No. <span className="text-red-500">*</span></Label>
+                    <span className="text-[9px] text-emerald-700 font-bold flex items-center gap-0.5">
+                      <Sparkles className="w-2.5 h-2.5" /> Auto-Seq
+                    </span>
+                  </div>
                   <Input 
                     value={invoiceNo} 
                     onChange={(e) => setInvoiceNo(e.target.value)} 
                     required 
                     className="h-9 text-xs mt-1 font-mono bg-slate-50 font-bold text-slate-800" 
+                    title="Consecutive sequential invoice number"
                   />
                 </div>
               </div>
@@ -325,7 +491,7 @@ export default function InvoiceBuilder({
             </div>
           </div>
 
-          {/* Line Items Table in ₹ */}
+          {/* Line Items Table with SAC / HSN in ₹ */}
           <InvoiceItemsTable
             items={items}
             onAddItem={handleAddItem}
@@ -378,22 +544,31 @@ export default function InvoiceBuilder({
 
               {isGst ? (
                 <>
-                  <div className="flex justify-between items-center text-slate-600">
-                    <span>CGST ({(numericGstRate / 2)}%)</span>
-                    <span className="font-mono">{formatCurrency(totals.cgst)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-slate-600">
-                    <span>SGST ({(numericGstRate / 2)}%)</span>
-                    <span className="font-mono">{formatCurrency(totals.sgst)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-emerald-800 font-semibold border-t border-slate-200/60 pt-1">
-                    <span>Total GST ({numericGstRate}%)</span>
-                    <span className="font-mono">{formatCurrency(totals.tax)}</span>
-                  </div>
+                  {gstType === 'inter' ? (
+                    <div className="flex justify-between items-center text-blue-800 font-medium">
+                      <span>IGST ({numericGstRate}%) [Inter-State]</span>
+                      <span className="font-mono font-semibold">{formatCurrency(totals.igst)}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>CGST ({(numericGstRate / 2)}%) [Central Tax]</span>
+                        <span className="font-mono">{formatCurrency(totals.cgst)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>SGST ({(numericGstRate / 2)}%) [State Tax]</span>
+                        <span className="font-mono">{formatCurrency(totals.sgst)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-emerald-800 font-semibold border-t border-slate-200/60 pt-1">
+                        <span>Total GST ({numericGstRate}%)</span>
+                        <span className="font-mono">{formatCurrency(totals.tax)}</span>
+                      </div>
+                    </>
+                  )}
                 </>
               ) : (
                 <div className="flex justify-between items-center text-slate-400 italic">
-                  <span>GST (0% Non-GST)</span>
+                  <span>GST (0% Non-GST / Exempt)</span>
                   <span className="font-mono">₹0.00</span>
                 </div>
               )}

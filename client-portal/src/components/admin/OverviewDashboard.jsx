@@ -39,8 +39,9 @@ export default function OverviewDashboard({
     }
 
     const activeClientsCount = customers.filter(c => !c.is_disabled).length;
-    const licenseUsagePercent = Math.min(100, Math.round((soldLicensesCount / maxLicenses) * 100));
-    const remainingLicenses = Math.max(0, maxLicenses - soldLicensesCount);
+    const poolUsed = isDistributor ? soldLicensesCount : customers.length;
+    const licenseUsagePercent = maxLicenses > 0 ? Math.min(100, Math.round((poolUsed / maxLicenses) * 100)) : 0;
+    const remainingLicenses = Math.max(0, maxLicenses - poolUsed);
 
     return {
       activeClientsCount,
@@ -49,11 +50,11 @@ export default function OverviewDashboard({
       totalPaid,
       totalUnpaid,
       totalDocuments: documents.length,
-      soldLicensesCount,
+      soldLicensesCount: poolUsed,
       licenseUsagePercent,
       remainingLicenses,
     };
-  }, [customers, invoices, documents, maxLicenses, soldLicensesCount]);
+  }, [customers, invoices, documents, maxLicenses, soldLicensesCount, isDistributor]);
 
   // Fast customer docs & invoices count lookup
   const clientStatsMap = useMemo(() => {
@@ -125,50 +126,52 @@ export default function OverviewDashboard({
       </div>
 
       {/* High-End Enterprise KPI Metric Cards */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isDistributor ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-5`}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
         
-        {/* Card 1: License Sales & Quota (Distributor Only) */}
-        {isDistributor && (
-          <Card 
-            className={`border-sky-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.03),0_1px_2px_rgba(0,0,0,0.02)] bg-gradient-to-br from-white via-sky-50/20 to-sky-50/40 rounded-2xl transition-all duration-200 ${
-              onNavigateToLicenses ? 'cursor-pointer hover:border-sky-400 hover:shadow-md' : ''
-            }`}
-            onClick={onNavigateToLicenses}
-          >
-            <CardContent className="p-6 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-sky-900 uppercase tracking-wider">License Pool</span>
-                <div className="p-2.5 bg-sky-100/80 rounded-xl text-sky-700 border border-sky-200/60">
-                  <KeyRound className="w-4 h-4" />
-                </div>
+        {/* Card 1: License Pool & Quota */}
+        <Card 
+          className={`border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.03),0_1px_2px_rgba(0,0,0,0.02)] bg-white rounded-2xl hover:border-slate-300 hover:shadow-md transition-all duration-200 ${
+            isDistributor && onNavigateToLicenses ? 'cursor-pointer' : onOpenOnboardModal ? 'cursor-pointer' : ''
+          }`}
+          onClick={isDistributor ? onNavigateToLicenses : onOpenOnboardModal}
+        >
+          <CardContent className="p-6 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">License Pool</span>
+              <div className="p-2.5 bg-slate-100 rounded-xl text-slate-700 border border-slate-200/60">
+                <KeyRound className="w-4 h-4" />
               </div>
-              <div className="flex items-baseline gap-1.5 pt-1">
-                <span className="text-3xl font-extrabold text-slate-900 font-mono">{kpis.soldLicensesCount}</span>
-                <span className="text-xs text-slate-500 font-mono font-medium">/ {maxLicenses} Sold</span>
+            </div>
+            <div className="flex items-baseline gap-1.5 pt-1">
+              <span className="text-3xl font-extrabold text-slate-900 font-mono">{kpis.soldLicensesCount}</span>
+              <span className="text-xs text-slate-500 font-mono font-medium">/ {maxLicenses} {isDistributor ? 'Sold' : 'Used'}</span>
+            </div>
+            <div className="space-y-1.5 pt-1">
+              <div className="w-full h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    kpis.licenseUsagePercent >= 90 ? 'bg-rose-500' : kpis.licenseUsagePercent >= 70 ? 'bg-amber-500' : 'bg-emerald-600'
+                  }`}
+                  style={{ width: `${kpis.licenseUsagePercent}%` }}
+                />
               </div>
-              <div className="space-y-1.5 pt-1">
-                <div className="w-full h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      kpis.licenseUsagePercent >= 90 ? 'bg-rose-500' : kpis.licenseUsagePercent >= 70 ? 'bg-amber-500' : 'bg-sky-600'
-                    }`}
-                    style={{ width: `${kpis.licenseUsagePercent}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between pt-0.5">
-                  <p className="text-[11px] font-semibold text-slate-500">
-                    {kpis.remainingLicenses} available
-                  </p>
-                  {onNavigateToLicenses && (
-                    <span className="text-[11px] font-bold text-sky-700 hover:underline flex items-center gap-0.5">
-                      Sell ↗
-                    </span>
-                  )}
-                </div>
+              <div className="flex items-center justify-between pt-0.5">
+                <p className="text-[11px] font-semibold text-slate-500">
+                  {kpis.remainingLicenses} available
+                </p>
+                {isDistributor && onNavigateToLicenses ? (
+                  <span className="text-[11px] font-bold text-slate-700 hover:underline flex items-center gap-0.5">
+                    Sell ↗
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold text-slate-700 hover:underline flex items-center gap-0.5">
+                    + Onboard
+                  </span>
+                )}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Card 2: Active Clients */}
         <Card className="border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.03),0_1px_2px_rgba(0,0,0,0.02)] bg-white rounded-2xl hover:border-slate-300 hover:shadow-md transition-all duration-200">

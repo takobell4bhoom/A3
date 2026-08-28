@@ -50,6 +50,14 @@ function AppRoutes() {
           path="/login" 
           element={<Navigate to="/" replace />} 
         />
+        <Route 
+          path="/signup" 
+          element={<Navigate to="/" replace />} 
+        />
+        <Route 
+          path="/register" 
+          element={<Navigate to="/" replace />} 
+        />
 
         {/* Dedicated Firm / Distributor Login URL (Never auto-routes to owner secret path) */}
         <Route 

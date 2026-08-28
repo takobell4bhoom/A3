@@ -13,22 +13,41 @@ export default function WorkTrackerCard({ statusTracker }) {
   // Determine progress metrics based on current status
   const progressInfo = useMemo(() => {
     if (!statusTracker || !statusTracker.current_step) {
-      return { stepNum: 1, percentage: 25, isCompleted: false, title: 'Pending Initial Review' };
+      return { stepNum: 1, percentage: 25, isCompleted: false, title: 'Step 1 of 4: Initial Document Gathering' };
     }
 
     const s = statusTracker.current_step.toLowerCase();
+    const match = s.match(/(?:step|phase)\s*([1-4])/i);
+    let stepNum = 1;
+    if (match && match[1]) {
+      stepNum = parseInt(match[1], 10);
+    } else if (s.includes('accepted') || s.includes('completed') || s.includes('filed')) {
+      stepNum = 4;
+    } else if (s.includes('draft') || s.includes('signature') || s.includes('signoff')) {
+      stepNum = 3;
+    } else if (s.includes('review') || s.includes('audit') || s.includes('calculation') || s.includes('computation')) {
+      stepNum = 2;
+    }
 
-    if (s.includes('step 4') || s.includes('accepted') || s.includes('completed') || s.includes('filed')) {
-      return { stepNum: 4, percentage: 100, isCompleted: true, title: statusTracker.current_step };
-    }
-    if (s.includes('step 3') || s.includes('draft') || s.includes('signature')) {
-      return { stepNum: 3, percentage: 75, isCompleted: false, title: statusTracker.current_step };
-    }
-    if (s.includes('step 2') || s.includes('review') || s.includes('audit') || s.includes('calculation')) {
-      return { stepNum: 2, percentage: 50, isCompleted: false, title: statusTracker.current_step };
-    }
-    return { stepNum: 1, percentage: 25, isCompleted: false, title: statusTracker.current_step };
+    const isCompleted = stepNum === 4 && (
+      s.includes('completed') || 
+      s.includes('accepted') || 
+      s.includes('filed') ||
+      s.includes('100%')
+    );
+    const percentage = isCompleted ? 100 : stepNum === 4 ? 100 : stepNum === 3 ? 75 : stepNum === 2 ? 50 : 25;
+
+    return { stepNum, percentage, isCompleted, title: statusTracker.current_step };
   }, [statusTracker]);
+
+  // Extract clean dynamic title from custom statusTracker
+  const getCardTitle = (step) => {
+    if (step.num === progressInfo.stepNum && statusTracker?.current_step) {
+      const clean = statusTracker.current_step.replace(/^(?:step\s*\d+\s*(?:of\s*\d+)?|phase\s*\d+)\s*:\s*/i, '').trim();
+      return clean || step.title;
+    }
+    return step.title;
+  };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-200">
@@ -114,6 +133,7 @@ export default function WorkTrackerCard({ statusTracker }) {
             {PIPELINE_STEPS.map((step) => {
               const isPast = step.num < progressInfo.stepNum || progressInfo.isCompleted;
               const isCurrent = step.num === progressInfo.stepNum && !progressInfo.isCompleted;
+              const cardTitle = getCardTitle(step);
 
               return (
                 <div
@@ -142,7 +162,7 @@ export default function WorkTrackerCard({ statusTracker }) {
                     )}
                   </div>
                   <h4 className={`font-bold text-xs mt-2 leading-snug ${isCurrent ? 'text-white' : 'text-slate-900'}`}>
-                    {step.title}
+                    {cardTitle}
                   </h4>
                   <p className={`text-[10px] mt-1 line-clamp-2 leading-relaxed ${isCurrent ? 'text-slate-300' : 'text-slate-500'}`}>
                     {step.desc}

@@ -34,8 +34,6 @@ export default function ClientWorkspace({
   firmName = 'Tax Shield Advisor',
 }) {
   const [workspaceTab, setWorkspaceTab] = useState('documents'); // 'documents' | 'status' | 'invoices' | 'profile'
-  const [statusStep, setStatusStep] = useState(() => statusTracker?.current_step || 'Step 1 of 4: Initial Document Gathering');
-  const [statusNotes, setStatusNotes] = useState(() => statusTracker?.notes || '');
 
   // Calculate client-specific outstanding balance
   const outstandingBalance = useMemo(() => {
@@ -211,11 +209,9 @@ export default function ClientWorkspace({
 
       {workspaceTab === 'status' && (
         <ClientWorkTrackerTab
+          key={`${client.id}_${statusTracker?.updated_at || statusTracker?.current_step || 'init'}`}
           client={client}
-          statusStep={statusStep}
-          setStatusStep={setStatusStep}
-          statusNotes={statusNotes}
-          setStatusNotes={setStatusNotes}
+          statusTracker={statusTracker}
           onUpdateStatus={onUpdateStatus}
           savingStatus={savingStatus}
         />

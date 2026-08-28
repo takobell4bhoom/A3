@@ -28,19 +28,40 @@ export default function WorkTrackerManager({
 
   const activeClient = selectedCustomer || customers[0] || null;
 
-  const currentProgress = useMemo(() => {
+  const [selectedStepNum, setSelectedStepNum] = useState(() => {
     const s = (statusStep || '').toLowerCase();
-    if (s.includes('step 4') || s.includes('accepted') || s.includes('completed') || s.includes('filed')) {
-      return { stepNum: 4, percentage: 100, isCompleted: true };
+    const match = s.match(/(?:step|phase)\s*([1-4])/i);
+    if (match && match[1]) return parseInt(match[1], 10);
+    if (s.includes('step 4') || s.includes('accepted') || s.includes('completed') || s.includes('filed')) return 4;
+    if (s.includes('step 3') || s.includes('draft') || s.includes('signature')) return 3;
+    if (s.includes('step 2') || s.includes('review') || s.includes('audit') || s.includes('calculation')) return 2;
+    return 1;
+  });
+
+  const activeStepNum = useMemo(() => {
+    const s = (statusStep || '').toLowerCase();
+    const match = s.match(/(?:step|phase)\s*([1-4])/i);
+    if (match && match[1]) {
+      return parseInt(match[1], 10);
     }
-    if (s.includes('step 3') || s.includes('draft') || s.includes('signature')) {
-      return { stepNum: 3, percentage: 75, isCompleted: false };
-    }
-    if (s.includes('step 2') || s.includes('review') || s.includes('audit') || s.includes('calculation')) {
-      return { stepNum: 2, percentage: 50, isCompleted: false };
-    }
-    return { stepNum: 1, percentage: 25, isCompleted: false };
-  }, [statusStep]);
+    if (s.includes('accepted') || s.includes('completed') || s.includes('filed')) return 4;
+    if (s.includes('draft') || s.includes('signature') || s.includes('signoff')) return 3;
+    if (s.includes('review') || s.includes('audit') || s.includes('calculation') || s.includes('computation')) return 2;
+    return selectedStepNum || 1;
+  }, [statusStep, selectedStepNum]);
+
+  const currentProgress = useMemo(() => {
+    const stepNum = activeStepNum;
+    const s = (statusStep || '').toLowerCase();
+    const isCompleted = stepNum === 4 && (
+      s.includes('completed') || 
+      s.includes('accepted') || 
+      s.includes('filed') ||
+      s.includes('100%')
+    );
+    const percentage = isCompleted ? 100 : stepNum === 4 ? 100 : stepNum === 3 ? 75 : stepNum === 2 ? 50 : 25;
+    return { stepNum, percentage, isCompleted };
+  }, [activeStepNum, statusStep]);
 
   const filteredClients = useMemo(() => {
     if (!clientSearchQuery.trim()) return customers;
@@ -60,6 +81,7 @@ export default function WorkTrackerManager({
     if (!activeClient) return;
     const completedTitle = 'Step 4 of 4: Return Filed & Accepted by Tax Authority';
     const completedNotes = statusNotes || 'Tax return filing successfully verified and completed.';
+    setSelectedStepNum(4);
     setStatusStep(completedTitle);
     setStatusNotes(completedNotes);
     onUpdateStatus(activeClient.id, completedTitle, completedNotes);
@@ -69,6 +91,7 @@ export default function WorkTrackerManager({
     if (!activeClient) return;
     const initialTitle = 'Step 1 of 4: Initial Document Gathering';
     const initialNotes = '';
+    setSelectedStepNum(1);
     setStatusStep(initialTitle);
     setStatusNotes(initialNotes);
     onUpdateStatus(activeClient.id, initialTitle, initialNotes);
@@ -207,7 +230,10 @@ export default function WorkTrackerManager({
                 <button
                   key={st.num}
                   type="button"
-                  onClick={() => setStatusStep(`Step ${st.num} of 4: ${st.title}`)}
+                  onClick={() => {
+                    setSelectedStepNum(st.num);
+                    setStatusStep(`Step ${st.num} of 4: ${st.title}`);
+                  }}
                   className="text-[11px] px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors border border-slate-200 text-left"
                 >
                   Phase {st.num}: {st.title}

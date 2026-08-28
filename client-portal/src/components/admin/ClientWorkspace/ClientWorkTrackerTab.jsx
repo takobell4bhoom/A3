@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,27 +17,68 @@ const PIPELINE_STEPS = [
 
 export default function ClientWorkTrackerTab({
   client,
-  statusStep,
-  setStatusStep,
-  statusNotes,
-  setStatusNotes,
+  statusTracker,
+  statusStep: propStatusStep,
+  setStatusStep: propSetStatusStep,
+  statusNotes: propStatusNotes,
+  setStatusNotes: propSetStatusNotes,
   onUpdateStatus,
   savingStatus = false,
 }) {
-  // Compute current step index & progress percentage
-  const currentProgress = useMemo(() => {
+  const [internalStatusStep, setInternalStatusStep] = useState(() => statusTracker?.current_step || propStatusStep || 'Step 1 of 4: Initial Document Gathering');
+  const [internalStatusNotes, setInternalStatusNotes] = useState(() => statusTracker?.notes || propStatusNotes || '');
+
+  const statusStep = propSetStatusStep ? propStatusStep : internalStatusStep;
+  const setStatusStep = propSetStatusStep || setInternalStatusStep;
+
+  const statusNotes = propSetStatusNotes ? propStatusNotes : internalStatusNotes;
+  const setStatusNotes = propSetStatusNotes || setInternalStatusNotes;
+
+  const [selectedStepNum, setSelectedStepNum] = useState(() => {
     const s = (statusStep || '').toLowerCase();
-    if (s.includes('step 4') || s.includes('accepted') || s.includes('completed') || s.includes('filed')) {
-      return { stepNum: 4, percentage: 100, isCompleted: true };
+    const match = s.match(/(?:step|phase)\s*([1-4])/i);
+    if (match && match[1]) return parseInt(match[1], 10);
+    if (s.includes('step 4') || s.includes('accepted') || s.includes('completed') || s.includes('filed')) return 4;
+    if (s.includes('step 3') || s.includes('draft') || s.includes('signature')) return 3;
+    if (s.includes('step 2') || s.includes('review') || s.includes('audit') || s.includes('calculation')) return 2;
+    return 1;
+  });
+
+  // Compute active step index & handle custom milestone titles
+  const activeStepNum = useMemo(() => {
+    const s = (statusStep || '').toLowerCase();
+    const match = s.match(/(?:step|phase)\s*([1-4])/i);
+    if (match && match[1]) {
+      return parseInt(match[1], 10);
     }
-    if (s.includes('step 3') || s.includes('draft') || s.includes('signature')) {
-      return { stepNum: 3, percentage: 75, isCompleted: false };
+    if (s.includes('accepted') || s.includes('completed') || s.includes('filed')) return 4;
+    if (s.includes('draft') || s.includes('signature') || s.includes('signoff')) return 3;
+    if (s.includes('review') || s.includes('audit') || s.includes('calculation') || s.includes('computation')) return 2;
+    return selectedStepNum || 1;
+  }, [statusStep, selectedStepNum]);
+
+  // Compute current step progress percentage
+  const currentProgress = useMemo(() => {
+    const stepNum = activeStepNum;
+    const s = (statusStep || '').toLowerCase();
+    const isCompleted = stepNum === 4 && (
+      s.includes('completed') || 
+      s.includes('accepted') || 
+      s.includes('filed') ||
+      s.includes('100%')
+    );
+    const percentage = isCompleted ? 100 : stepNum === 4 ? 100 : stepNum === 3 ? 75 : stepNum === 2 ? 50 : 25;
+    return { stepNum, percentage, isCompleted };
+  }, [activeStepNum, statusStep]);
+
+  // Extract clean dynamic title from custom statusStep
+  const getCardTitle = (st) => {
+    if (st.num === currentProgress.stepNum && statusStep) {
+      const clean = statusStep.replace(/^(?:step\s*\d+\s*(?:of\s*\d+)?|phase\s*\d+)\s*:\s*/i, '').trim();
+      return clean || st.title;
     }
-    if (s.includes('step 2') || s.includes('review') || s.includes('audit') || s.includes('calculation')) {
-      return { stepNum: 2, percentage: 50, isCompleted: false };
-    }
-    return { stepNum: 1, percentage: 25, isCompleted: false };
-  }, [statusStep]);
+    return st.title;
+  };
 
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
@@ -49,6 +90,7 @@ export default function ClientWorkTrackerTab({
   const handleCompleteTask = () => {
     const completedTitle = 'Step 4 of 4: Return Filed & Accepted by Tax Authority';
     const completedNotes = statusNotes || 'Tax return filing successfully verified and completed.';
+    setSelectedStepNum(4);
     setStatusStep(completedTitle);
     setStatusNotes(completedNotes);
     onUpdateStatus(client.id, completedTitle, completedNotes);
@@ -58,12 +100,14 @@ export default function ClientWorkTrackerTab({
   const handleStartNewTask = () => {
     const initialTitle = 'Step 1 of 4: Initial Document Gathering';
     const initialNotes = '';
+    setSelectedStepNum(1);
     setStatusStep(initialTitle);
     setStatusNotes(initialNotes);
     onUpdateStatus(client.id, initialTitle, initialNotes);
   };
 
   const handleSelectPhase = (step) => {
+    setSelectedStepNum(step.num);
     setStatusStep(`Step ${step.num} of 4: ${step.title}`);
   };
 
@@ -127,6 +171,7 @@ export default function ClientWorkTrackerTab({
           {PIPELINE_STEPS.map((st) => {
             const isPast = st.num < currentProgress.stepNum || currentProgress.isCompleted;
             const isCurrent = st.num === currentProgress.stepNum && !currentProgress.isCompleted;
+            const cardTitle = getCardTitle(st);
 
             return (
               <div
@@ -155,7 +200,7 @@ export default function ClientWorkTrackerTab({
                     <Circle className="w-3.5 h-3.5 text-slate-300" />
                   )}
                 </div>
-                <h4 className={`font-bold text-xs mt-1.5 leading-snug ${isCurrent ? 'text-white' : 'text-slate-900'}`}>{st.title}</h4>
+                <h4 className={`font-bold text-xs mt-1.5 leading-snug ${isCurrent ? 'text-white' : 'text-slate-900'}`}>{cardTitle}</h4>
                 <span className={`text-[10px] block mt-0.5 ${isCurrent ? 'text-slate-300' : 'text-slate-500'}`}>{st.pct}% Target</span>
               </div>
             );

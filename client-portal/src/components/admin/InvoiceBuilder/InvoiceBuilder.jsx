@@ -139,6 +139,20 @@ export default function InvoiceBuilder({
       return;
     }
 
+    // Enrich items array so JSONB preserves full GST details on any database schema
+    const enrichedItems = items.map(item => ({
+      ...item,
+      sac_code: item.sac_code || '9983',
+      gst_type: gstType,
+      gst_rate: numericGstRate,
+      place_of_supply: placeOfSupply,
+      is_rcm: isRcm,
+      cgst_amount: totals.cgst,
+      sgst_amount: totals.sgst,
+      igst_amount: totals.igst,
+      tax_amount: totals.tax,
+    }));
+
     const invoicePayload = {
       user_id: activeClient.id,
       invoice_no: invoiceNo,
@@ -153,7 +167,7 @@ export default function InvoiceBuilder({
       total_cents: totals.totalCents,
       amount: totals.total, // In decimal Rupees
       stripe_url: stripeUrl.trim() || undefined,
-      items: items,
+      items: enrichedItems,
       status: 'unpaid',
       // Enterprise GST Metadata
       gst_type: gstType,

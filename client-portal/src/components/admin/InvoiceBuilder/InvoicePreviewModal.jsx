@@ -44,17 +44,18 @@ export default function InvoicePreviewModal({
   const discount = invoice.discount_cents ? invoice.discount_cents / 100 : Number(invoice.discount_total || 0);
   const roundOff = invoice.round_off_cents ? invoice.round_off_cents / 100 : Number(invoice.round_off || 0);
 
-  const gstType = invoice.gst_type || (invoice.billing_entity?.includes('IGST') ? 'inter' : (invoice.billing_entity?.includes('Non GST') || invoice.billing_entity?.includes('0%') ? 'exempt' : 'intra'));
+  const firstItem = Array.isArray(invoice.items) && invoice.items.length > 0 ? invoice.items[0] : {};
+  const gstType = invoice.gst_type || firstItem?.gst_type || (invoice.billing_entity?.includes('IGST') ? 'inter' : (invoice.billing_entity?.includes('Non GST') || invoice.billing_entity?.includes('0%') ? 'exempt' : 'intra'));
   const isExplicitNonGst = gstType === 'exempt' || (invoice.billing_entity && (invoice.billing_entity.includes('Non GST') || invoice.billing_entity.includes('0%')));
   const gstRateMatch = invoice.billing_entity?.match(/(\d+(\.\d+)?)%/);
   const parsedGstRate = isExplicitNonGst 
     ? 0 
-    : Number(invoice.gst_rate ?? (invoice.tax_rate ?? (gstRateMatch ? gstRateMatch[1] : (invoice.billing_entity?.includes('GST') ? 18 : 0))));
+    : Number(invoice.gst_rate ?? (firstItem?.gst_rate ?? (invoice.tax_rate ?? (gstRateMatch ? gstRateMatch[1] : (invoice.billing_entity?.includes('GST') ? 18 : 0)))));
 
   const isGst = parsedGstRate > 0 && gstType !== 'exempt';
   const taxableAmount = Math.max(0, subtotal - discount);
   const calculatedTax = isGst ? Math.round(taxableAmount * (parsedGstRate / 100) * 100) / 100 : 0;
-  const taxAmount = invoice.tax_amount ? Number(invoice.tax_amount) : calculatedTax;
+  const taxAmount = invoice.tax_amount ? Number(invoice.tax_amount) : (firstItem?.tax_amount ? Number(firstItem.tax_amount) : calculatedTax);
 
   let cgst = 0;
   let sgst = 0;
@@ -62,16 +63,16 @@ export default function InvoicePreviewModal({
 
   if (isGst) {
     if (gstType === 'inter') {
-      igst = invoice.igst_amount ? Number(invoice.igst_amount) : taxAmount;
+      igst = invoice.igst_amount ? Number(invoice.igst_amount) : (firstItem?.igst_amount ? Number(firstItem.igst_amount) : taxAmount);
     } else {
-      cgst = invoice.cgst_amount ? Number(invoice.cgst_amount) : Math.round((taxAmount / 2) * 100) / 100;
-      sgst = invoice.sgst_amount ? Number(invoice.sgst_amount) : Math.round((taxAmount - cgst) * 100) / 100;
+      cgst = invoice.cgst_amount ? Number(invoice.cgst_amount) : (firstItem?.cgst_amount ? Number(firstItem.cgst_amount) : Math.round((taxAmount / 2) * 100) / 100);
+      sgst = invoice.sgst_amount ? Number(invoice.sgst_amount) : (firstItem?.sgst_amount ? Number(firstItem.sgst_amount) : Math.round((taxAmount - cgst) * 100) / 100);
     }
   }
 
   const halfRate = parsedGstRate / 2;
-  const placeOfSupply = invoice.place_of_supply || (organization?.state ? `${organization.state}` : '');
-  const isRcm = invoice.is_rcm === true || invoice.is_rcm === 'true' || invoice.is_rcm === 'yes' ? 'Yes' : 'No';
+  const placeOfSupply = invoice.place_of_supply || firstItem?.place_of_supply || (organization?.state ? `${organization.state}` : '');
+  const isRcm = (invoice.is_rcm ?? firstItem?.is_rcm) === true || (invoice.is_rcm ?? firstItem?.is_rcm) === 'true' || (invoice.is_rcm ?? firstItem?.is_rcm) === 'yes' ? 'Yes' : 'No';
   const clientGstin = client?.gstin || invoice.client_gstin || invoice.user?.gstin;
   const clientPan = client?.pan || invoice.client_pan || invoice.user?.pan;
 

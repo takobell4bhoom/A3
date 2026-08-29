@@ -653,14 +653,49 @@ export default function AdminDashboard({ session }) {
     }
   };
 
-  // Create Invoice Handler
+  // Create Invoice Handler with Schema-Resilient Fallback
   const handleCreateInvoice = async (invoicePayload) => {
     setSavingInvoice(true);
     try {
-      const { error } = await supabase.from('invoices').insert([{
+      const fullRecord = {
         ...invoicePayload,
         organization_id: orgId,
-      }]);
+      };
+
+      // 1. Try inserting full record with extended GST fields
+      let { error } = await supabase.from('invoices').insert([fullRecord]);
+
+      // 2. If Postgres schema does not have extended columns (e.g. cgst_amount, gst_type, etc.),
+      // sanitize to standard core schema columns and re-attempt insert
+      if (error && (error.message?.includes('schema cache') || error.code === 'PGRST204' || error.message?.includes('column'))) {
+        console.warn('Extended GST columns missing in invoices table. Falling back to core schema columns...', error.message);
+        
+        const corePayload = {
+          user_id: invoicePayload.user_id,
+          organization_id: orgId,
+          invoice_no: invoicePayload.invoice_no,
+          billing_entity: invoicePayload.billing_entity,
+          payment_term: invoicePayload.payment_term,
+          issue_date: invoicePayload.issue_date,
+          due_date: invoicePayload.due_date,
+          remarks: invoicePayload.remarks,
+          subtotal_cents: invoicePayload.subtotal_cents,
+          discount_cents: invoicePayload.discount_cents,
+          round_off_cents: invoicePayload.round_off_cents,
+          total_cents: invoicePayload.total_cents,
+          amount: invoicePayload.amount,
+          stripe_url: invoicePayload.stripe_url,
+          items: invoicePayload.items,
+          status: invoicePayload.status || 'unpaid',
+        };
+
+        // Remove undefined fields
+        Object.keys(corePayload).forEach(k => corePayload[k] === undefined && delete corePayload[k]);
+
+        const retryResult = await supabase.from('invoices').insert([corePayload]);
+        error = retryResult.error;
+      }
+
       if (error) throw error;
 
       toast.success(
@@ -670,7 +705,8 @@ export default function AdminDashboard({ session }) {
       await refreshGlobalData();
       return true;
     } catch (err) {
-      toast.error('Invoice Creation Failed', err.message);
+      console.error('Invoice creation error:', err);
+      toast.error('Invoice Creation Failed', err.message || 'Could not create invoice.');
       return false;
     } finally {
       setSavingInvoice(false);

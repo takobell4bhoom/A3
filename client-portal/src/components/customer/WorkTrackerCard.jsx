@@ -9,6 +9,50 @@ const PIPELINE_STEPS = [
   { num: 4, title: 'Filed & Accepted', desc: 'Officially accepted by Tax Authority', pct: 100 },
 ];
 
+const DEFAULT_PHASE_TITLES = {
+  1: 'Initial Document Gathering',
+  2: 'Tax Audit & Calculation',
+  3: 'Draft Review & Signature',
+  4: 'Return Filed & Accepted',
+};
+
+function getStoredPhases(orgId, clientId, currentStepString) {
+  let stored = {};
+  try {
+    if (clientId) {
+      const clientData = localStorage.getItem(`client_pipeline_phases_${clientId}`);
+      if (clientData) stored = JSON.parse(clientData);
+    }
+    if (!Object.keys(stored).length && orgId) {
+      const firmData = localStorage.getItem(`firm_pipeline_phases_${orgId}`);
+      if (firmData) stored = JSON.parse(firmData);
+    }
+    if (!Object.keys(stored).length) {
+      const globalData = localStorage.getItem('firm_pipeline_phases_default');
+      if (globalData) stored = JSON.parse(globalData);
+    }
+  } catch (e) {
+    console.warn('Could not read phase titles from storage', e);
+  }
+
+  const result = {
+    1: stored[1] || stored['1'] || DEFAULT_PHASE_TITLES[1],
+    2: stored[2] || stored['2'] || DEFAULT_PHASE_TITLES[2],
+    3: stored[3] || stored['3'] || DEFAULT_PHASE_TITLES[3],
+    4: stored[4] || stored['4'] || DEFAULT_PHASE_TITLES[4],
+  };
+
+  if (currentStepString) {
+    const match = currentStepString.match(/(?:step|phase)\s*([1-4])/i);
+    const clean = currentStepString.replace(/^(?:step\s*\d+\s*(?:of\s*\d+)?|phase\s*\d+)\s*:\s*/i, '').trim();
+    if (match && match[1] && clean) {
+      result[match[1]] = clean;
+    }
+  }
+
+  return result;
+}
+
 export default function WorkTrackerCard({ statusTracker }) {
   // Determine progress metrics based on current status
   const progressInfo = useMemo(() => {
@@ -40,13 +84,17 @@ export default function WorkTrackerCard({ statusTracker }) {
     return { stepNum, percentage, isCompleted, title: statusTracker.current_step };
   }, [statusTracker]);
 
+  const phaseTitles = useMemo(() => {
+    return getStoredPhases(statusTracker?.organization_id, statusTracker?.user_id, statusTracker?.current_step);
+  }, [statusTracker]);
+
   // Extract clean dynamic title from custom statusTracker
   const getCardTitle = (step) => {
     if (step.num === progressInfo.stepNum && statusTracker?.current_step) {
       const clean = statusTracker.current_step.replace(/^(?:step\s*\d+\s*(?:of\s*\d+)?|phase\s*\d+)\s*:\s*/i, '').trim();
-      return clean || step.title;
+      return clean || phaseTitles[step.num] || step.title;
     }
-    return step.title;
+    return phaseTitles[step.num] || step.title;
   };
 
   return (

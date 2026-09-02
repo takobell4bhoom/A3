@@ -12,6 +12,50 @@ const PIPELINE_STEPS = [
   { num: 4, title: 'Return Filed & Accepted', desc: 'Accepted by Tax Authority / IRS', pct: 100 },
 ];
 
+const DEFAULT_PHASE_TITLES = {
+  1: 'Initial Document Gathering',
+  2: 'Tax Audit & Calculation',
+  3: 'Draft Review & Signature',
+  4: 'Return Filed & Accepted',
+};
+
+function getStoredPhases(orgId, clientId, currentStepString) {
+  let stored = {};
+  try {
+    if (clientId) {
+      const clientData = localStorage.getItem(`client_pipeline_phases_${clientId}`);
+      if (clientData) stored = JSON.parse(clientData);
+    }
+    if (!Object.keys(stored).length && orgId) {
+      const firmData = localStorage.getItem(`firm_pipeline_phases_${orgId}`);
+      if (firmData) stored = JSON.parse(firmData);
+    }
+    if (!Object.keys(stored).length) {
+      const globalData = localStorage.getItem('firm_pipeline_phases_default');
+      if (globalData) stored = JSON.parse(globalData);
+    }
+  } catch (e) {
+    console.warn('Could not read phase titles from storage', e);
+  }
+
+  const result = {
+    1: stored[1] || stored['1'] || DEFAULT_PHASE_TITLES[1],
+    2: stored[2] || stored['2'] || DEFAULT_PHASE_TITLES[2],
+    3: stored[3] || stored['3'] || DEFAULT_PHASE_TITLES[3],
+    4: stored[4] || stored['4'] || DEFAULT_PHASE_TITLES[4],
+  };
+
+  if (currentStepString) {
+    const match = currentStepString.match(/(?:step|phase)\s*([1-4])/i);
+    const clean = currentStepString.replace(/^(?:step\s*\d+\s*(?:of\s*\d+)?|phase\s*\d+)\s*:\s*/i, '').trim();
+    if (match && match[1] && clean) {
+      result[match[1]] = clean;
+    }
+  }
+
+  return result;
+}
+
 export default function WorkTrackerManager({
   customers = [],
   selectedCustomer,
@@ -27,6 +71,10 @@ export default function WorkTrackerManager({
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
 
   const activeClient = selectedCustomer || customers[0] || null;
+
+  const phaseTitles = useMemo(() => {
+    return getStoredPhases(activeClient?.organization_id, activeClient?.id, statusStep);
+  }, [activeClient, statusStep]);
 
   const [selectedStepNum, setSelectedStepNum] = useState(() => {
     const s = (statusStep || '').toLowerCase();
@@ -232,11 +280,12 @@ export default function WorkTrackerManager({
                   type="button"
                   onClick={() => {
                     setSelectedStepNum(st.num);
-                    setStatusStep(`Step ${st.num} of 4: ${st.title}`);
+                    const titleForStep = phaseTitles[st.num] || st.title;
+                    setStatusStep(`Step ${st.num} of 4: ${titleForStep}`);
                   }}
                   className="text-[11px] px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors border border-slate-200 text-left"
                 >
-                  Phase {st.num}: {st.title}
+                  Phase {st.num}: {phaseTitles[st.num] || st.title}
                 </button>
               ))}
             </div>

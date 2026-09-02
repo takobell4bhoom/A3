@@ -15,6 +15,64 @@ const PIPELINE_STEPS = [
   { num: 4, title: 'Return Filed & Accepted', desc: 'Accepted by Tax Authority / IRS', pct: 100 },
 ];
 
+const DEFAULT_PHASE_TITLES = {
+  1: 'Initial Document Gathering',
+  2: 'Tax Audit & Calculation',
+  3: 'Draft Review & Signature',
+  4: 'Return Filed & Accepted',
+};
+
+function getStoredPhases(orgId, clientId, currentStepString) {
+  let stored = {};
+  try {
+    if (clientId) {
+      const clientData = localStorage.getItem(`client_pipeline_phases_${clientId}`);
+      if (clientData) stored = JSON.parse(clientData);
+    }
+    if (!Object.keys(stored).length && orgId) {
+      const firmData = localStorage.getItem(`firm_pipeline_phases_${orgId}`);
+      if (firmData) stored = JSON.parse(firmData);
+    }
+    if (!Object.keys(stored).length) {
+      const globalData = localStorage.getItem('firm_pipeline_phases_default');
+      if (globalData) stored = JSON.parse(globalData);
+    }
+  } catch (e) {
+    console.warn('Could not read phase titles from storage', e);
+  }
+
+  const result = {
+    1: stored[1] || stored['1'] || DEFAULT_PHASE_TITLES[1],
+    2: stored[2] || stored['2'] || DEFAULT_PHASE_TITLES[2],
+    3: stored[3] || stored['3'] || DEFAULT_PHASE_TITLES[3],
+    4: stored[4] || stored['4'] || DEFAULT_PHASE_TITLES[4],
+  };
+
+  if (currentStepString) {
+    const match = currentStepString.match(/(?:step|phase)\s*([1-4])/i);
+    const clean = currentStepString.replace(/^(?:step\s*\d+\s*(?:of\s*\d+)?|phase\s*\d+)\s*:\s*/i, '').trim();
+    if (match && match[1] && clean) {
+      result[match[1]] = clean;
+    }
+  }
+
+  return result;
+}
+
+function saveStoredPhases(orgId, clientId, phases) {
+  try {
+    if (clientId) {
+      localStorage.setItem(`client_pipeline_phases_${clientId}`, JSON.stringify(phases));
+    }
+    if (orgId) {
+      localStorage.setItem(`firm_pipeline_phases_${orgId}`, JSON.stringify(phases));
+    }
+    localStorage.setItem('firm_pipeline_phases_default', JSON.stringify(phases));
+  } catch (e) {
+    console.warn('Could not write phase titles to storage', e);
+  }
+}
+
 export default function ClientWorkTrackerTab({
   client,
   statusTracker,
@@ -33,6 +91,10 @@ export default function ClientWorkTrackerTab({
 
   const statusNotes = propSetStatusNotes ? propStatusNotes : internalStatusNotes;
   const setStatusNotes = propSetStatusNotes || setInternalStatusNotes;
+
+  const [phaseTitles, setPhaseTitles] = useState(() => 
+    getStoredPhases(client?.organization_id, client?.id, statusTracker?.current_step || propStatusStep)
+  );
 
   const [selectedStepNum, setSelectedStepNum] = useState(() => {
     const s = (statusStep || '').toLowerCase();
@@ -71,44 +133,64 @@ export default function ClientWorkTrackerTab({
     return { stepNum, percentage, isCompleted };
   }, [activeStepNum, statusStep]);
 
-  // Extract clean dynamic title from custom statusStep
-  const getCardTitle = (st) => {
-    if (st.num === currentProgress.stepNum && statusStep) {
-      const clean = statusStep.replace(/^(?:step\s*\d+\s*(?:of\s*\d+)?|phase\s*\d+)\s*:\s*/i, '').trim();
-      return clean || st.title;
+  const handleStatusStepChange = (val) => {
+    setStatusStep(val);
+    const clean = val.replace(/^(?:step\s*\d+\s*(?:of\s*\d+)?|phase\s*\d+)\s*:\s*/i, '').trim();
+    if (clean) {
+      setPhaseTitles(prev => {
+        const next = { ...prev, [activeStepNum]: clean };
+        saveStoredPhases(client?.organization_id, client?.id, next);
+        return next;
+      });
     }
-    return st.title;
+  };
+
+  const handlePhaseTitleDirectChange = (phaseNum, newTitle) => {
+    setPhaseTitles(prev => {
+      const next = { ...prev, [phaseNum]: newTitle };
+      saveStoredPhases(client?.organization_id, client?.id, next);
+      return next;
+    });
+    if (activeStepNum === phaseNum) {
+      setStatusStep(`Step ${phaseNum} of 4: ${newTitle}`);
+    }
   };
 
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
     if (!client) return;
+    saveStoredPhases(client?.organization_id, client?.id, phaseTitles);
     onUpdateStatus(client.id, statusStep, statusNotes);
   };
 
   // One-click Complete Task Action
   const handleCompleteTask = () => {
-    const completedTitle = 'Step 4 of 4: Return Filed & Accepted by Tax Authority';
+    const titleForStep4 = phaseTitles[4] || 'Return Filed & Accepted by Tax Authority';
+    const completedTitle = `Step 4 of 4: ${titleForStep4}`;
     const completedNotes = statusNotes || 'Tax return filing successfully verified and completed.';
     setSelectedStepNum(4);
     setStatusStep(completedTitle);
     setStatusNotes(completedNotes);
+    saveStoredPhases(client?.organization_id, client?.id, phaseTitles);
     onUpdateStatus(client.id, completedTitle, completedNotes);
   };
 
   // Start New Task Cycle Action
   const handleStartNewTask = () => {
-    const initialTitle = 'Step 1 of 4: Initial Document Gathering';
+    const titleForStep1 = phaseTitles[1] || 'Initial Document Gathering';
+    const initialTitle = `Step 1 of 4: ${titleForStep1}`;
     const initialNotes = '';
     setSelectedStepNum(1);
     setStatusStep(initialTitle);
     setStatusNotes(initialNotes);
+    saveStoredPhases(client?.organization_id, client?.id, phaseTitles);
     onUpdateStatus(client.id, initialTitle, initialNotes);
   };
 
   const handleSelectPhase = (step) => {
     setSelectedStepNum(step.num);
-    setStatusStep(`Step ${step.num} of 4: ${step.title}`);
+    const titleForStep = phaseTitles[step.num] || step.title;
+    setStatusStep(`Step ${step.num} of 4: ${titleForStep}`);
   };
 
   return (
@@ -171,7 +253,7 @@ export default function ClientWorkTrackerTab({
           {PIPELINE_STEPS.map((st) => {
             const isPast = st.num < currentProgress.stepNum || currentProgress.isCompleted;
             const isCurrent = st.num === currentProgress.stepNum && !currentProgress.isCompleted;
-            const cardTitle = getCardTitle(st);
+            const cardTitle = phaseTitles[st.num] || st.title;
 
             return (
               <div
@@ -214,7 +296,7 @@ export default function ClientWorkTrackerTab({
           <div>
             <CardTitle className="text-base text-slate-900">Milestone Control &amp; Broadcast</CardTitle>
             <CardDescription className="text-xs">
-              Change the phase or mark the filing completely finished.
+              Change the phase or customize the titles for all 4 filing stages.
             </CardDescription>
           </div>
 
@@ -246,17 +328,47 @@ export default function ClientWorkTrackerTab({
           </div>
         </CardHeader>
 
-        <CardContent className="pt-6 space-y-4">
+        <CardContent className="pt-6 space-y-5">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label className="text-xs font-semibold text-slate-700">Milestone Phase Title <span className="text-red-500">*</span></Label>
+              <Label className="text-xs font-semibold text-slate-700">Active Milestone Title <span className="text-red-500">*</span></Label>
               <Input
                 placeholder="e.g. Step 2 of 4: Tax Audit & Calculation in Progress"
                 value={statusStep}
-                onChange={(e) => setStatusStep(e.target.value)}
+                onChange={(e) => handleStatusStepChange(e.target.value)}
                 required
                 className="mt-1 text-xs font-medium"
               />
+            </div>
+
+            {/* Custom 4 Phase Titles Editor */}
+            <div className="pt-3 pb-1 border-t border-slate-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                  Customize All 4 Phase Names
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  Updates apply across cards &amp; client screen
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {[1, 2, 3, 4].map((num) => (
+                  <div key={num} className="space-y-1">
+                    <Label className="text-[10px] font-semibold text-slate-600 flex items-center justify-between">
+                      <span>Phase 0{num} Title</span>
+                      {activeStepNum === num && (
+                        <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded">Active</span>
+                      )}
+                    </Label>
+                    <Input
+                      value={phaseTitles[num] || ''}
+                      onChange={(e) => handlePhaseTitleDirectChange(num, e.target.value)}
+                      placeholder={`Phase ${num} Title`}
+                      className="h-8 text-xs bg-slate-50/70 border-slate-200"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div>

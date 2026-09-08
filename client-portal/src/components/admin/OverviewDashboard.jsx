@@ -5,7 +5,7 @@ import { Card, CardContent, CardTitle, CardDescription } from '@/components/ui/c
 import { formatCurrency } from '@/lib/currency';
 import { 
   Users, Receipt, Clock, CheckCircle, Search, ArrowRight, 
-  UserPlus, Building2, ShieldAlert, X, KeyRound 
+  UserPlus, Building2, ShieldAlert, X, KeyRound, AlertTriangle 
 } from 'lucide-react';
 
 export default function OverviewDashboard({
@@ -15,6 +15,7 @@ export default function OverviewDashboard({
   onSelectClient,
   onOpenOnboardModal,
   onNavigateToLicenses,
+  onNavigateToClients,
   isDistributor = false,
   maxLicenses = 25,
   soldLicensesCount = 0,
@@ -85,6 +86,11 @@ export default function OverviewDashboard({
     );
   }, [customers, searchQuery]);
 
+  // Clients with pending account deletion requests
+  const deletionRequests = useMemo(() => {
+    return customers.filter(c => Boolean(c.deletion_requested_at));
+  }, [customers]);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       
@@ -114,6 +120,7 @@ export default function OverviewDashboard({
               <KeyRound className="w-4 h-4" /> Sell Licenses Hub
             </Button>
           )}
+
           <Button
             variant="accent"
             size="sm"
@@ -124,6 +131,42 @@ export default function OverviewDashboard({
           </Button>
         </div>
       </div>
+
+      {/* Pending Account Deletion Requests Alert Banner */}
+      {deletionRequests.length > 0 && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5 text-rose-600" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold text-rose-900">
+                  {deletionRequests.length} Account Deletion Request{deletionRequests.length > 1 ? 's' : ''} Pending
+                </h4>
+                <span className="text-[9px] font-extrabold bg-rose-200/80 text-rose-800 px-2 py-0.5 rounded-full">
+                  Action Required
+                </span>
+              </div>
+              <p className="text-[11px] text-rose-700 mt-0.5">
+                {deletionRequests.length === 1 
+                  ? `${deletionRequests[0].full_name || deletionRequests[0].email} has requested permanent account and data deletion.`
+                  : `${deletionRequests.length} clients have requested account and data deletion under compliance.`}
+              </p>
+            </div>
+          </div>
+          {onNavigateToClients && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onNavigateToClients}
+              className="text-xs font-bold bg-white text-rose-800 border-rose-300 hover:bg-rose-100 h-9 px-4 shrink-0 shadow-2xs cursor-pointer"
+            >
+              Review In Directory →
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* High-End Enterprise KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">

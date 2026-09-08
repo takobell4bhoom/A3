@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.taxshieldadvisor.clientportal",
+      "sha256_cert_fingerprints": [
+        "14:6D:E9:7D:0F:52:AB:E6:EC:29:21:2E:E8:DD:3E:AE:41:04:11:A4:B6:94:49:77:B4:B6:22:04:6E:FF:4E:91"
+      ]
+    }
+  }
+]

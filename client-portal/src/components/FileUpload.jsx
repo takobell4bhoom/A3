@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/toast';
 import { validateFile, generateSecureFilePath } from '@/lib/storage';
-import { UploadCloud, CheckCircle2, AlertCircle, FileText, Loader2 } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertCircle, FileText, Loader2, Camera } from 'lucide-react';
 
 export default function FileUpload({ userId, onUploadComplete }) {
   const [file, setFile] = useState(null);
@@ -116,12 +116,39 @@ export default function FileUpload({ userId, onUploadComplete }) {
             onChange={handleFileChange}
             disabled={uploading}
           />
+          <input
+            type="file"
+            id="camera-input"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleFileChange}
+            disabled={uploading}
+          />
           <label htmlFor="file-input" className="cursor-pointer space-y-2 block">
             <FileText className="w-10 h-10 mx-auto text-slate-400" />
             <div className="text-sm font-medium text-slate-700">
               {file ? file.name : "Click to select or drag & drop files here"}
             </div>
             <p className="text-xs text-slate-400">PDF, XLSX, DOCX, PNG, JPG up to 500MB</p>
+          </label>
+        </div>
+
+        {/* Mobile Quick Action Buttons (Direct Camera vs Files) */}
+        <div className="grid grid-cols-2 gap-2 sm:hidden">
+          <label
+            htmlFor="camera-input"
+            className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 cursor-pointer shadow-2xs active:scale-[0.98] transition-all"
+          >
+            <Camera className="w-4 h-4 text-emerald-600" />
+            <span>Take Photo</span>
+          </label>
+          <label
+            htmlFor="file-input"
+            className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 cursor-pointer shadow-2xs active:scale-[0.98] transition-all"
+          >
+            <FileText className="w-4 h-4 text-blue-600" />
+            <span>Browse Files</span>
           </label>
         </div>
 

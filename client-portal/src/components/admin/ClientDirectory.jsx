@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { ConfirmationModal } from '@/components/ui/dialog';
 import { 
   Users, UserPlus, ShieldAlert, CheckCircle, Search, X, ArrowRight, Trash2, 
-  ChevronLeft, ChevronRight 
+  ChevronLeft, ChevronRight, AlertTriangle 
 } from 'lucide-react';
 import { formatDate } from '@/lib/dateUtils';
 import { formatCurrency } from '@/lib/currency';
@@ -21,7 +21,7 @@ export default function ClientDirectory({
   loading = false,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'disabled'
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'disabled' | 'deletion_requested'
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [deleteTargetClient, setDeleteTargetClient] = useState(null);
@@ -53,8 +53,9 @@ export default function ClientDirectory({
       const matchesSearch = !q || (c.email && c.email.toLowerCase().includes(q)) || (c.full_name && c.full_name.toLowerCase().includes(q));
       const matchesStatus = 
         statusFilter === 'all' ||
-        (statusFilter === 'active' && !c.is_disabled) ||
-        (statusFilter === 'disabled' && c.is_disabled);
+        (statusFilter === 'active' && !c.is_disabled && !c.deletion_requested_at) ||
+        (statusFilter === 'disabled' && c.is_disabled && !c.deletion_requested_at) ||
+        (statusFilter === 'deletion_requested' && Boolean(c.deletion_requested_at));
 
       return matchesSearch && matchesStatus;
     });
@@ -69,8 +70,9 @@ export default function ClientDirectory({
     return filteredCustomers.slice(start, start + pageSize);
   }, [filteredCustomers, effectivePage, pageSize]);
 
-  const activeCount = customers.filter(c => !c.is_disabled).length;
-  const disabledCount = customers.filter(c => c.is_disabled).length;
+  const activeCount = customers.filter(c => !c.is_disabled && !c.deletion_requested_at).length;
+  const disabledCount = customers.filter(c => c.is_disabled && !c.deletion_requested_at).length;
+  const deletionRequestCount = customers.filter(c => Boolean(c.deletion_requested_at)).length;
 
   return (
     <div className="space-y-6">
@@ -136,6 +138,21 @@ export default function ClientDirectory({
             >
               <ShieldAlert className="w-3 h-3" /> Suspended ({disabledCount})
             </button>
+
+            {deletionRequestCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter('deletion_requested')}
+                className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 animate-pulse ${
+                  statusFilter === 'deletion_requested'
+                    ? 'bg-rose-600 text-white shadow-sm'
+                    : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'
+                }`}
+              >
+                <AlertTriangle className="w-3 h-3 text-rose-600" />
+                Deletion Requests ({deletionRequestCount})
+              </button>
+            )}
           </div>
 
           <div className="relative w-full sm:w-72">
@@ -223,7 +240,24 @@ export default function ClientDirectory({
                       </td>
 
                       <td className="p-3.5">
-                        {customer.is_disabled ? (
+                        {customer.deletion_requested_at ? (
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
+                              <AlertTriangle className="w-3 h-3 text-rose-600" /> Deletion Requested
+                            </span>
+                            <span className="text-[9.5px] text-slate-400">
+                              {formatDate(customer.deletion_requested_at)}
+                            </span>
+                            {customer.deletion_reason && (
+                              <span 
+                                className="text-[9px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 italic truncate max-w-[170px]" 
+                                title={customer.deletion_reason}
+                              >
+                                &quot;{customer.deletion_reason}&quot;
+                              </span>
+                            )}
+                          </div>
+                        ) : customer.is_disabled ? (
                           <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-700">
                             <ShieldAlert className="w-3 h-3" /> Suspended
                           </span>
@@ -259,12 +293,22 @@ export default function ClientDirectory({
                             Workspace <ArrowRight className="w-3.5 h-3.5" />
                           </Button>
 
-                          {onDeleteCustomer && (
+                          {customer.deletion_requested_at ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setDeleteTargetClient(customer)}
+                              className="h-8 px-2.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border-rose-300 gap-1 shadow-2xs"
+                              title="Review & Purge Client Account"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" /> Purge
+                            </Button>
+                          ) : onDeleteCustomer && (
                             <button
                               type="button"
                               onClick={() => setDeleteTargetClient(customer)}
                               title="Delete Client Account"
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -349,13 +393,15 @@ export default function ClientDirectory({
           setDeleteTargetClient(null);
           await onDeleteCustomer(targetId);
         }}
-        title="Permanently Delete Client"
+        title={deleteTargetClient?.deletion_requested_at ? "Purge Requested Account" : "Permanently Delete Client"}
         description={
           deleteTargetClient
-            ? `Are you sure you want to delete "${deleteTargetClient.full_name || deleteTargetClient.email}"? All documents, status milestones, and billing records will be permanently erased.`
+            ? deleteTargetClient.deletion_requested_at
+              ? `Client requested account deletion on ${formatDate(deleteTargetClient.deletion_requested_at)}${deleteTargetClient.deletion_reason ? ` (Reason: "${deleteTargetClient.deletion_reason}")` : ''}. Are you sure you want to permanently purge all documents, invoices, and profile records for "${deleteTargetClient.full_name || deleteTargetClient.email}"?`
+              : `Are you sure you want to delete "${deleteTargetClient.full_name || deleteTargetClient.email}"? All documents, status milestones, and billing records will be permanently erased.`
             : ''
         }
-        confirmText="Delete Client Permanently"
+        confirmText={deleteTargetClient?.deletion_requested_at ? "Purge All Data Permanently" : "Delete Client Permanently"}
         variant="danger"
         loading={deletingClient}
       />

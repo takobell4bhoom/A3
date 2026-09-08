@@ -7,6 +7,7 @@ import OwnerLogin from './components/OwnerLogin';
 import CustomerPortal from './components/CustomerPortal';
 import AdminDashboard from './components/AdminDashboard';
 import OwnerDashboard from './components/owner/OwnerDashboard';
+import MobileLaunchpad from './components/mobile/MobileLaunchpad';
 import { Loader2 } from 'lucide-react';
 
 /**
@@ -85,7 +86,7 @@ function AppRoutes() {
           } 
         />
 
-        {/* Customer Portal Route */}
+        {/* Customer Portal Route (Direct full portal on desktop) */}
         <Route 
           path="/portal" 
           element={
@@ -95,6 +96,20 @@ function AppRoutes() {
               <CustomerPortal session={session} />
             )
           } 
+        />
+
+        {/* 
+          📱 EXCLUSIVE MOBILE LAUNCHPAD ROUTE (2x2 Matrix Hub)
+          Rendered directly without forceful redirects.
+          Desktop remains completely unaffected on / and /portal.
+        */}
+        <Route 
+          path="/m" 
+          element={<MobileLaunchpad />} 
+        />
+        <Route 
+          path="/mobile" 
+          element={<Navigate to="/m" replace />} 
         />
 
         {/* 

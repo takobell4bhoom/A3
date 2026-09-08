@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/toast';
@@ -9,9 +10,10 @@ import CustomerDocuments from './customer/CustomerDocuments';
 import CustomerInvoices from './customer/CustomerInvoices';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Clock, FolderOpen, Receipt, ShieldAlert } from 'lucide-react';
+import { Clock, FolderOpen, Receipt, ShieldAlert, LayoutGrid } from 'lucide-react';
 
 export default function CustomerPortal({ session }) {
+  const navigate = useNavigate();
   const { user, organization, isDisabled, features, signOut } = useAuth();
 
   const showWorkTracker = features?.workTracker !== false;
@@ -194,6 +196,7 @@ export default function CustomerPortal({ session }) {
         firmName={organization?.name || 'Tax Shield Advisor'}
         logoUrl={organization?.logo_url}
         userEmail={session?.user?.email}
+        userId={userId}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         documentCount={documents.length}
@@ -236,6 +239,13 @@ export default function CustomerPortal({ session }) {
 
       {/* Mobile App Bottom Navigation Bar (Dynamically Gated) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 text-white border-t border-slate-800 z-40 flex items-center justify-around h-16 px-2">
+        <button
+          onClick={() => navigate('/m')}
+          className="flex flex-col items-center justify-center w-full h-full text-[10px] gap-1 text-slate-400 hover:text-white"
+        >
+          <LayoutGrid className="w-5 h-5 text-blue-400" /> Home
+        </button>
+
         {showWorkTracker && (
           <button
             onClick={() => setActiveTab('overview')}

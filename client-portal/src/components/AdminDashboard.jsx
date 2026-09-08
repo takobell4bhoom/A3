@@ -812,6 +812,11 @@ export default function AdminDashboard({ session }) {
               setIsCreatingClient(false);
               setActiveTab('licenses');
             }}
+            onNavigateToClients={() => {
+              setSelectedCustomer(null);
+              setIsCreatingClient(false);
+              setActiveTab('clients');
+            }}
             isDistributor={isDistributor}
             maxLicenses={activeMaxLicenses}
             soldLicensesCount={soldLicensesCount}

@@ -1,10 +1,14 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { LogOut, LayoutDashboard, FolderOpen, Receipt } from 'lucide-react';
+import { LogOut, LayoutDashboard, FolderOpen, Receipt, LayoutGrid, Shield } from 'lucide-react';
+import AccountSettingsModal from './AccountSettingsModal';
 
 export default function CustomerHeader({
   firmName = 'Tax Shield Advisor',
   logoUrl,
   userEmail,
+  userId,
   activeTab,
   setActiveTab,
   documentCount = 0,
@@ -12,7 +16,9 @@ export default function CustomerHeader({
   features = { invoices: true, documents: true, workTracker: true },
   onSignOut,
 }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const showWorkTracker = features?.workTracker !== false;
+
   const showDocuments = features?.documents !== false;
   const showInvoices = features?.invoices !== false;
 
@@ -20,19 +26,29 @@ export default function CustomerHeader({
     <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 shadow-[0_1px_3px_0_rgba(0,0,0,0.02),0_1px_2px_-1px_rgba(0,0,0,0.02)]">
       <div className="max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 h-18 sm:h-20 flex items-center justify-between gap-3 lg:gap-6">
         
-        {/* Brand Logo (Prominent, Dynamic & Responsive) */}
-        <div className="flex items-center shrink-0 py-1">
+        {/* Brand Logo & Mobile Hub Link */}
+        <div className="flex items-center gap-2 shrink-0 py-1">
+          {/* Mobile Launchpad Back Button (Visible only on mobile) */}
+          <Link
+            to="/m"
+            className="md:hidden flex items-center gap-1 bg-slate-100/90 hover:bg-slate-200 border border-slate-200/80 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-slate-700 transition-colors shadow-2xs shrink-0"
+            title="Return to Mobile Launchpad"
+          >
+            <LayoutGrid className="w-3.5 h-3.5 text-blue-700" />
+            <span>Home</span>
+          </Link>
+
           {logoUrl ? (
             <img 
               src={logoUrl} 
               alt={firmName} 
-              className="h-10 sm:h-11 md:h-12 lg:h-13 w-auto max-w-[150px] sm:max-w-[180px] md:max-w-[210px] lg:max-w-[240px] object-contain shrink-0 transition-all drop-shadow-2xs" 
+              className="h-10 sm:h-11 md:h-12 lg:h-13 w-auto max-w-[130px] sm:max-w-[180px] md:max-w-[210px] lg:max-w-[240px] object-contain shrink-0 transition-all drop-shadow-2xs" 
             />
           ) : (
             <img 
               src="/taxshield-logo.jpg" 
               alt="Taxshield Advisor" 
-              className="h-10 sm:h-11 md:h-12 lg:h-13 w-auto max-w-[150px] sm:max-w-[180px] md:max-w-[210px] lg:max-w-[240px] object-contain shrink-0 transition-all drop-shadow-2xs" 
+              className="h-10 sm:h-11 md:h-12 lg:h-13 w-auto max-w-[130px] sm:max-w-[180px] md:max-w-[210px] lg:max-w-[240px] object-contain shrink-0 transition-all drop-shadow-2xs" 
             />
           )}
         </div>
@@ -92,6 +108,14 @@ export default function CustomerHeader({
             <p className="text-[10px] text-slate-500 font-medium">Verified Client</p>
           </div>
 
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="Account Security & Deletion Request"
+            className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200/80 text-slate-600 flex items-center justify-center transition-colors shadow-2xs shrink-0 cursor-pointer"
+          >
+            <Shield className="w-3.5 h-3.5" />
+          </button>
+
           <Button 
             variant="outline" 
             size="sm" 
@@ -103,6 +127,15 @@ export default function CustomerHeader({
         </div>
 
       </div>
+
+      {/* Account Settings / Google Play Account Deletion Modal */}
+      <AccountSettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        userEmail={userEmail}
+        userId={userId}
+        onSignOut={onSignOut}
+      />
     </header>
   );
 }

@@ -9,9 +9,10 @@ export default function MobileSupportDrawer({
   organization, 
   firmName = 'Tax Shield Advisor',
   userEmail,
+  initialTopic = '',
 }) {
   const toast = useToast();
-  const [queryText, setQueryText] = useState('');
+  const [queryText, setQueryText] = useState(initialTopic ? `I would like to inquire about ${initialTopic}.` : '');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -20,12 +21,15 @@ export default function MobileSupportDrawer({
   // Configurable contact details from organization metadata or defaults
   const supportPhone = organization?.phone || '+91 7428238001';
   const cleanPhone = supportPhone.replace(/[^0-9]/g, '');
-  const supportEmail = organization?.support_email || 'support@taxshieldadvisor.com';
+  const supportEmail = organization?.support_email || 'simar@taxshieldadvisor.com';
   const whatsappNumber = organization?.whatsapp || cleanPhone;
 
   const handleWhatsApp = () => {
+    const detailText = queryText.trim()
+      ? `I need assistance regarding: ${queryText.trim()}`
+      : 'I need assistance with my portal services.';
     const message = encodeURIComponent(
-      `Hello ${firmName}, I need assistance with my tax filing portal account (${userEmail || 'Client'}).`
+      `Hello ${firmName}, ${detailText} (${userEmail || 'Client'}).`
     );
     window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank');
   };

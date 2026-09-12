@@ -1,0 +1,53 @@
+{
+  "packageId": "com.taxshield.advisor",
+  "host": "portal.taxshieldadvisor.com",
+  "name": "Tax Shield Advisor",
+  "launcherName": "TaxShield",
+  "display": "standalone",
+  "themeColor": "#0F172A",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#F8FAFC",
+  "enableNotifications": true,
+  "startUrl": "/m",
+  "iconUrl": "http://127.0.0.1:9876/icon-512.png",
+  "maskableIconUrl": "http://127.0.0.1:9876/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "/Users/lokesh/Documents/lacto/simar-filex/keystore/upload-keystore.jks",
+    "alias": "upload"
+  },
+  "appVersionName": "2.0.0",
+  "appVersionCode": 4,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://portal.taxshieldadvisor.com/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://portal.taxshieldadvisor.com/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [
+    {
+      "value": "46:98:F4:17:B4:E7:94:04:06:16:03:09:57:0A:FC:C1:90:12:46:92:C8:D5:24:C7:EB:40:BE:CA:4E:CF:32:8C"
+    },
+    {
+      "value": "4D:73:AA:1B:D2:4C:54:D8:A4:6B:0C:3B:2A:F3:62:2B:F1:A2:EA:CD:01:65:0E:1A:26:25:C4:0E:D7:85:84:3C"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "displayOverride": [],
+  "appVersion": "2.0.0"
+}

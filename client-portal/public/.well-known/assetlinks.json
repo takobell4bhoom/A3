@@ -3,9 +3,12 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.taxshieldadvisor.clientportal",
+      "package_name": "com.taxshield.advisor",
       "sha256_cert_fingerprints": [
-        "14:6D:E9:7D:0F:52:AB:E6:EC:29:21:2E:E8:DD:3E:AE:41:04:11:A4:B6:94:49:77:B4:B6:22:04:6E:FF:4E:91"
+        "46:98:F4:17:B4:E7:94:04:06:16:03:09:57:0A:FC:C1:90:12:46:92:C8:D5:24:C7:EB:40:BE:CA:4E:CF:32:8C",
+        "4D:73:AA:1B:D2:4C:54:D8:A4:6B:0C:3B:2A:F3:62:2B:F1:A2:EA:CD:01:65:0E:1A:26:25:C4:0E:D7:85:84:3C",
+        "10:F7:75:11:C9:13:F9:D4:BB:E3:1B:BF:96:04:40:83:F3:B9:52:C4:E8:7C:3F:A2:C4:2E:C2:58:BA:67:4A:C0",
+        "BB:F5:15:74:E8:ED:4F:08:78:9C:E1:7A:94:DC:D8:17:A8:ED:5B:19:07:F2:9C:4A:38:F1:DB:10:4B:EA:31:16"
       ]
     }
   }

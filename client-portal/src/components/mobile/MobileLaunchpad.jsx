@@ -22,6 +22,7 @@ export default function MobileLaunchpad() {
   const { session, user, organization, signOut } = useAuth();
   
   const [supportOpen, setSupportOpen] = useState(false);
+  const [supportTopic, setSupportTopic] = useState('');
   const [pricingOpen, setPricingOpen] = useState(false);
   const [statusTracker, setStatusTracker] = useState(null);
   const [docCount, setDocCount] = useState(0);
@@ -173,7 +174,10 @@ export default function MobileLaunchpad() {
 
             {/* TILE 2: Live Support (Styled with warm amber depth like 'Sell Licenses') */}
             <button
-              onClick={() => setSupportOpen(true)}
+              onClick={() => {
+                setSupportTopic('');
+                setSupportOpen(true);
+              }}
               className="bg-white border border-slate-200/90 shadow-[0_4px_14px_-2px_rgba(15,23,42,0.07),0_2px_4px_-1px_rgba(15,23,42,0.04)] rounded-2xl p-3.5 text-left flex flex-col justify-between min-h-[135px] relative group active:scale-[0.97] transition-all cursor-pointer"
             >
               <div className="flex items-center justify-between w-full">
@@ -196,7 +200,7 @@ export default function MobileLaunchpad() {
               </div>
             </button>
 
-            {/* TILE 3: Firm Website */}
+            {/* TILE 3: Our Website */}
             <button
               onClick={() => window.open(firmWebsite, '_blank')}
               className="bg-white border border-slate-200/90 shadow-[0_4px_14px_-2px_rgba(15,23,42,0.07),0_2px_4px_-1px_rgba(15,23,42,0.04)] rounded-2xl p-3.5 text-left flex flex-col justify-between min-h-[135px] relative group active:scale-[0.97] transition-all cursor-pointer"
@@ -212,7 +216,7 @@ export default function MobileLaunchpad() {
               
               <div className="mt-2">
                 <div className="text-xs font-bold text-slate-900 group-hover:text-sky-700 transition-colors flex items-center justify-between">
-                  <span>Firm Website</span>
+                  <span>Our Website</span>
                   <ArrowRight className="w-3 h-3 text-slate-300 group-hover:text-sky-700 group-hover:translate-x-0.5 transition-all" />
                 </div>
                 <p className="text-[9.5px] text-slate-500 font-medium leading-tight mt-0.5">
@@ -241,7 +245,7 @@ export default function MobileLaunchpad() {
                   <ArrowRight className="w-3 h-3 text-slate-300 group-hover:text-indigo-700 group-hover:translate-x-0.5 transition-all" />
                 </div>
                 <p className="text-[9.5px] text-slate-500 font-medium leading-tight mt-0.5">
-                  Filing packages &amp; rates
+                  All service rates &amp; packages
                 </p>
               </div>
             </button>
@@ -322,18 +326,21 @@ export default function MobileLaunchpad() {
 
       {/* Support Drawer */}
       <MobileSupportDrawer
+        key={supportTopic || 'support'}
         isOpen={supportOpen}
         onClose={() => setSupportOpen(false)}
         organization={organization}
         firmName={firmName}
         userEmail={session?.user?.email}
+        initialTopic={supportTopic}
       />
 
       {/* Pricing Modal */}
       <MobilePricingModal
         isOpen={pricingOpen}
         onClose={() => setPricingOpen(false)}
-        onSelectPlan={() => {
+        onSelectPlan={(planName) => {
+          setSupportTopic(planName);
           setSupportOpen(true);
         }}
       />

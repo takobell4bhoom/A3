@@ -6,46 +6,116 @@ export default function MobilePricingModal({ isOpen, onClose, onSelectPlan }) {
 
   const plans = [
     {
-      id: 'salaried',
-      name: 'Salaried Individual (ITR-1 / 2)',
+      id: 'gst-registration',
+      name: 'GST Registration',
       price: '₹1,499',
-      tag: 'Most Popular',
+      unit: 'per service',
+      tag: 'Registrations',
       tagColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      description: 'Ideal for employees with single or multiple Form 16s, house property & interest income.',
+      description: 'Complete GST registration support for businesses, startups & proprietors.',
       features: [
-        'Form 16 & AIS / 26AS cross-verification',
-        'Maximum tax refund optimization',
-        'Chapter VI-A (80C, 80D) deduction review',
-        'Post-filing verification & ITR-V generation',
+        'GST application preparation & filing',
+        'Document verification & application review',
+        'GST ARN tracking & status updates',
+        'GST certificate download & handover',
       ],
+      ctaText: 'Inquire About GST',
     },
     {
-      id: 'investor',
-      name: 'Capital Gains & Trading',
-      price: '₹2,999',
-      tag: 'Investors',
+      id: 'msme-registration',
+      name: 'MSME Registration',
+      price: '₹999',
+      unit: 'per service',
+      tag: 'Registrations',
       tagColor: 'bg-blue-50 text-blue-700 border-blue-200',
-      description: 'Comprehensive tax filing for stock traders, mutual fund investors & crypto holders.',
+      description: 'Get your business registered under Udyam for MSME recognition and benefits.',
       features: [
-        'Stocks, Mutual Funds & F&O capital gains',
-        'Direct Zerodha / Groww / CAMS P&L import',
-        'Loss carry-forward & set-off advisory',
-        'Foreign stock (RSU / ESPP) compliance',
+        'Udyam registration application',
+        'Business details & document verification',
+        'Udyam Registration Number generation',
+        'Digital MSME certificate handover',
       ],
+      ctaText: 'Inquire About MSME',
     },
     {
-      id: 'business',
-      name: 'Proprietorship & Freelancers',
-      price: '₹4,999',
-      tag: 'Professionals',
-      tagColor: 'bg-amber-50 text-amber-800 border-amber-200',
-      description: 'Presumptive taxation (Sec 44ADA / 44AD) for freelancers, doctors, lawyers & business.',
+      id: 'dsc-registration',
+      name: 'DSC Registration',
+      price: '₹2,499',
+      unit: 'per service',
+      tag: 'Digital Signature',
+      tagColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      description: 'Secure digital signature certificate for MCA, GST and other online compliance requirements.',
       features: [
-        'Gross receipts & presumptive income calculation',
-        'GST reconciliation with GSTR-1 / 3B',
-        'Advance tax quarterly liability check',
-        'Dedicated senior chartered accountant review',
+        'DSC application & documentation support',
+        'Aadhaar-based identity verification',
+        'Video verification assistance',
+        'DSC issuance & installation guidance',
       ],
+      ctaText: 'Inquire About DSC',
+    },
+    {
+      id: 'digital-marketing',
+      name: 'Digital Marketing',
+      price: '₹4,999',
+      unit: 'per service',
+      tag: 'Marketing',
+      tagColor: 'bg-purple-50 text-purple-700 border-purple-200',
+      description: 'Build your online presence and reach the right audience through digital marketing.',
+      features: [
+        'Social media marketing strategy',
+        'Creative content & campaign planning',
+        'Lead generation & audience targeting',
+        'Performance tracking & growth guidance',
+      ],
+      ctaText: 'Inquire About Marketing',
+    },
+    {
+      id: 'business-growth',
+      name: 'Business Growth',
+      price: '₹4,999',
+      unit: 'per service',
+      tag: 'Business Advisory',
+      tagColor: 'bg-amber-50 text-amber-800 border-amber-200',
+      description: 'Strategic business guidance to improve operations, build systems and scale your business.',
+      features: [
+        'Business growth & strategy planning',
+        'Revenue and lead generation guidance',
+        'Process automation & management systems',
+        'Funding and expansion advisory',
+      ],
+      ctaText: 'Inquire About Growth',
+    },
+    {
+      id: 'website-development',
+      name: 'Website Development',
+      price: '₹6,999',
+      unit: 'per service',
+      tag: 'Technology',
+      tagColor: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+      description: 'Professional, responsive websites designed to establish your brand online.',
+      features: [
+        'Responsive website design',
+        'Business-focused pages & content',
+        'Contact forms and essential integrations',
+        'Website launch & basic setup support',
+      ],
+      ctaText: 'Inquire About Website',
+    },
+    {
+      id: 'legal-drafting',
+      name: 'Legal Drafting',
+      price: '₹1,499',
+      unit: 'per service',
+      tag: 'Legal Services',
+      tagColor: 'bg-slate-100 text-slate-700 border-slate-200',
+      description: 'Professional legal document drafting support for businesses and everyday business needs.',
+      features: [
+        'Business agreements & contracts',
+        'Notices, declarations & legal letters',
+        'Customized drafting based on requirements',
+        'Document review & final draft delivery',
+      ],
+      ctaText: 'Inquire About Legal Drafting',
     },
   ];
 
@@ -65,7 +135,7 @@ export default function MobilePricingModal({ isOpen, onClose, onSelectPlan }) {
               <ShieldCheck className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-extrabold text-slate-900">Tax Advisory Plans</h3>
+              <h3 className="text-sm font-extrabold text-slate-900">Service Pricing &amp; Plans</h3>
               <p className="text-[10px] text-slate-400 font-medium">Transparent, zero hidden fees</p>
             </div>
           </div>
@@ -94,7 +164,7 @@ export default function MobilePricingModal({ isOpen, onClose, onSelectPlan }) {
                 </div>
                 <div className="text-right shrink-0">
                   <span className="text-sm font-black text-slate-900 font-mono">{p.price}</span>
-                  <p className="text-[9px] text-slate-400">per assessment</p>
+                  <p className="text-[9px] text-slate-400">{p.unit || 'per service'}</p>
                 </div>
               </div>
 
@@ -112,18 +182,18 @@ export default function MobilePricingModal({ isOpen, onClose, onSelectPlan }) {
                 size="sm"
                 onClick={() => {
                   onClose();
-                  if (onSelectPlan) onSelectPlan(p.name);
+                  if (onSelectPlan) onSelectPlan(p.name, p.ctaText);
                 }}
-                className="w-full text-xs h-8 rounded-xl font-bold gap-1 text-slate-700 hover:text-slate-900 hover:bg-slate-50"
+                className="w-full text-xs h-8 rounded-xl font-bold gap-1 text-slate-700 hover:text-slate-900 hover:bg-slate-50 transition-colors"
               >
-                Inquire About {p.name.split(' ')[0]} <ArrowRight className="w-3 h-3" />
+                <span>{p.ctaText || `Inquire About ${p.name.split(' ')[0]}`}</span> <ArrowRight className="w-3 h-3" />
               </Button>
             </div>
           ))}
         </div>
 
         <p className="text-[10px] text-center text-slate-400">
-          All filings prepared and audited by accredited Tax Practitioners &amp; Chartered Accountants.
+          All services managed and audited by accredited professionals &amp; advisors.
         </p>
 
       </div>

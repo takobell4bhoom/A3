@@ -1,0 +1,4 @@
+#Tue Sep 08 19:52:33 IST 2026
+base.0=/Users/lokesh/Documents/lacto/simar-filex/android/app/build/intermediates/dex/release/minifyReleaseWithR8/classes.dex
+renamed.0=classes.dex
+path.0=classes.dex
